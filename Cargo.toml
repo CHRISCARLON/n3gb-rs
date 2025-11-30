@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-base64 = "0.22"
-geo-types = "0.7"
+base64 = "0.22.1"
+geo-types = "0.7.17"
 proj = "0.31.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
