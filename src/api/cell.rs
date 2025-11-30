@@ -4,7 +4,7 @@ use crate::core::geometry::create_hexagon;
 use crate::core::grid::{hex_to_point, point_to_hex};
 use crate::util::coord::wgs84_to_bng;
 use crate::util::error::N3gbError;
-use crate::util::identifier::generate_identifier;
+use crate::util::identifier::{generate_identifier, decode_hex_identifier};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct HexCell {
@@ -24,6 +24,33 @@ impl HexCell {
             row,
             col,
         }
+    }
+
+
+    /// Create a HexCell from an encoded hex identifier
+    ///
+    /// # Example
+    /// ```
+    /// use n3gb_rs::HexCell;
+    ///
+    /// # fn main() -> Result<(), n3gb_rs::N3gbError> {
+    /// let cell = HexCell::from_bng(383640.0, 398260.0, 12)?;
+    /// let restored = HexCell::from_hex_id(&cell.id)?;
+    /// assert_eq!(cell.id, restored.id);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn from_hex_id(id: &str) -> Result<Self, N3gbError> {
+        let (_, easting, northing, zoom) = decode_hex_identifier(id)?;
+        let (row, col) = point_to_hex(easting, northing, zoom)?;
+
+        Ok(Self {
+            id: id.to_string(),
+            center: Point::new(easting, northing),
+            zoom_level: zoom,
+            row,
+            col,
+        })
     }
 
     /// Create a HexCell from British National Grid coordinates
