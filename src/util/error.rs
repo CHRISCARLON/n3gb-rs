@@ -1,0 +1,26 @@
+#[derive(Debug, PartialEq)]
+pub enum N3gbError {
+    InvalidIdentifierLength,
+    InvalidChecksum,
+    UnsupportedVersion(u8),
+    InvalidZoomLevel(u8),
+    InvalidDimension(String),
+    Base64DecodeError,
+    ProjectionError(String),
+}
+
+impl std::fmt::Display for N3gbError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            N3gbError::InvalidIdentifierLength => write!(f, "Invalid identifier length"),
+            N3gbError::InvalidChecksum => write!(f, "Invalid checksum"),
+            N3gbError::UnsupportedVersion(v) => write!(f, "Unsupported version: {}", v),
+            N3gbError::InvalidZoomLevel(z) => write!(f, "Invalid zoom level: {}", z),
+            N3gbError::InvalidDimension(msg) => write!(f, "Invalid dimension: {}", msg),
+            N3gbError::Base64DecodeError => write!(f, "Base64 decode error"),
+            N3gbError::ProjectionError(msg) => write!(f, "Projection error: {}", msg),
+        }
+    }
+}
+
+impl std::error::Error for N3gbError {}
