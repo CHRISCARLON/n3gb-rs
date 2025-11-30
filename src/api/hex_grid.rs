@@ -73,6 +73,7 @@ pub struct HexGridBuilder {
     max_y: Option<f64>,
 }
 
+
 impl HexGridBuilder {
     pub fn new() -> Self {
         Self::default()
@@ -109,6 +110,7 @@ impl HexGridBuilder {
         HexGrid::from_extent(min_x, min_y, max_x, max_y, zoom_level)
     }
 }
+
 
 fn generate_cells_for_extent(
     min_x: f64,

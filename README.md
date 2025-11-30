@@ -4,16 +4,40 @@ Rust implemented of a hex-based spatial indexing for British National Grid.
 
 Inspired by the work done by [GDS NUAR n3gb](https://github.com/national-underground-asset-register/n3gb).
 
+## Simple Overview
+
+Creating a HexCell
+
+1. point_to_hex — Takes your input coordinates and finds which grid cell they fall into. Returns (row, col).
+2. hex_to_point — Takes the (row, col) and calculates the exact center of that cell. This is where the offset for odd rows gets applied. Returns (center_x, center_y).
+3. generate_identifier — Takes the center coordinates of the HexCell and zoom level, packs it all into binary, and then encodes as Base64. The ID contains: version + center_x + center_y + zoom.
+
+Reconstructing from ID
+
+1. decode_hex_identifier — Decodes the Base64 string back into center_x, center_y, and zoom.
+2. create_hexagon — Draws 6 vertices around the center at the radius for that zoom level.
+
+How polygons maintain the offset structure
+
+They don't care nor need to know about it.
+
+The offset was already applied when hex_to_point calculated the center.
+
+The center coordinates themselves contain the offset.
+
+So create_hexagon just draws around whatever center you give it — the tiling works automatically because all centers were calculated using the same offset rules.
+
 ## Lib currently has two main entry points
 
 **1. Single cells** - use `HexCell`
 
 ```rust
-let cell = HexCell::from_wgs84(-2.248, 53.481, 12)?;  // lon/lat
 let cell = HexCell::from_bng(383640.0, 398260.0, 12)?; // BNG
 println!("{}", cell.id);
 let polygon = cell.to_polygon();
 ```
+
+Example output:
 
 ```bash
 Hex ID: AQAAAAAW3cpQAAAAABe831IMHg
