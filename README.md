@@ -17,15 +17,11 @@ Reconstructing from ID
 1. decode_hex_identifier — Decodes the Base64 string back into center_x, center_y, and zoom.
 2. create_hexagon — Draws 6 vertices around the center at the radius for that zoom level.
 
-How polygons maintain the offset structure
+How polygons maintain the offset structure?
 
-They don't care nor need to know about it.
-
-The offset was already applied when hex_to_point calculated the center.
-
-The center coordinates themselves contain the offset.
-
-So create_hexagon just draws around whatever center you give it — the tiling works automatically because all centers were calculated using the same offset rules.
+1. They don't care nor need to know about it.
+2. The offset is applied when hex_to_point calculates the centre.
+3. The centre coordinates themselves contain the offset.
 
 ## Lib currently has two main entry points
 
