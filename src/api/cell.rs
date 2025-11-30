@@ -1,10 +1,10 @@
-use geo_types::{Point, Polygon};
 use crate::core::constants::CELL_RADIUS;
 use crate::core::geometry::create_hexagon;
 use crate::core::grid::{hex_to_point, point_to_hex};
-use crate::util::coord::{wgs84_to_bng, Coordinate};
+use crate::util::coord::{Coordinate, wgs84_to_bng};
 use crate::util::error::N3gbError;
-use crate::util::identifier::{generate_identifier, decode_hex_identifier};
+use crate::util::identifier::{decode_hex_identifier, generate_identifier};
+use geo_types::{Point, Polygon};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct HexCell {
@@ -25,7 +25,6 @@ impl HexCell {
             col,
         }
     }
-
 
     /// Create a HexCell from an encoded hex identifier
     ///

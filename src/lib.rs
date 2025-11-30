@@ -39,16 +39,12 @@ pub mod util;
 
 pub use api::{HexCell, HexGrid, HexGridBuilder};
 pub use core::{
-    CELL_RADIUS, CELL_WIDTHS, GRID_EXTENTS, IDENTIFIER_VERSION, MAX_ZOOM_LEVEL,
-    bounding_box, from_across_corners, from_across_flats, from_apothem, from_area,
-    from_circumradius, from_side, HexagonDims,
-    create_hexagon,
-    hex_to_point, point_to_hex,
+    CELL_RADIUS, CELL_WIDTHS, GRID_EXTENTS, HexagonDims, IDENTIFIER_VERSION, MAX_ZOOM_LEVEL,
+    bounding_box, create_hexagon, from_across_corners, from_across_flats, from_apothem, from_area,
+    from_circumradius, from_side, hex_to_point, point_to_hex,
 };
 pub use util::{
-    N3gbError, Coordinate,
-    bng_to_wgs84, wgs84_to_bng,
-    decode_hex_identifier, generate_identifier,
+    Coordinate, N3gbError, bng_to_wgs84, decode_hex_identifier, generate_identifier, wgs84_to_bng,
 };
 
 pub use geo_types;
@@ -56,7 +52,7 @@ pub use geo_types;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use geo_types::{coord, point, Rect};
+    use geo_types::{Rect, coord, point};
 
     #[test]
     fn test_end_to_end_workflow() -> Result<(), N3gbError> {

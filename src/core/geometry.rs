@@ -1,5 +1,5 @@
-use geo_types::{Coord, LineString, Polygon};
 use crate::util::coord::Coordinate;
+use geo_types::{Coord, LineString, Polygon};
 
 pub fn create_hexagon<C: Coordinate>(center: &C, size: f64) -> Polygon<f64> {
     let mut coords = Vec::with_capacity(7);

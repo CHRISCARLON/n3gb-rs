@@ -1,8 +1,8 @@
-use geo_types::{Point, Polygon, Rect};
 use crate::api::cell::HexCell;
 use crate::core::constants::{GRID_EXTENTS, MAX_ZOOM_LEVEL};
 use crate::core::grid::{hex_to_point, point_to_hex};
 use crate::util::identifier::generate_identifier;
+use geo_types::{Point, Polygon, Rect};
 
 #[derive(Debug, Clone)]
 pub struct HexGrid {
@@ -11,7 +11,6 @@ pub struct HexGrid {
 }
 
 impl HexGrid {
-
     pub fn builder() -> HexGridBuilder {
         HexGridBuilder::new()
     }
@@ -22,7 +21,13 @@ impl HexGrid {
     }
 
     pub fn from_rect(rect: &Rect<f64>, zoom_level: u8) -> Self {
-        Self::from_extent(rect.min().x, rect.min().y, rect.max().x, rect.max().y, zoom_level)
+        Self::from_extent(
+            rect.min().x,
+            rect.min().y,
+            rect.max().x,
+            rect.max().y,
+            zoom_level,
+        )
     }
 
     pub fn zoom_level(&self) -> u8 {
@@ -73,7 +78,6 @@ pub struct HexGridBuilder {
     max_y: Option<f64>,
 }
 
-
 impl HexGridBuilder {
     pub fn new() -> Self {
         Self::default()
@@ -110,7 +114,6 @@ impl HexGridBuilder {
         HexGrid::from_extent(min_x, min_y, max_x, max_y, zoom_level)
     }
 }
-
 
 fn generate_cells_for_extent(
     min_x: f64,

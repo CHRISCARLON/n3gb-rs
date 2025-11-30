@@ -1,6 +1,6 @@
+use crate::util::error::N3gbError;
 use geo_types::Point;
 use proj::Proj;
-use crate::util::error::N3gbError;
 
 pub trait Coordinate {
     fn x(&self) -> f64;
@@ -8,20 +8,29 @@ pub trait Coordinate {
 }
 
 impl Coordinate for (f64, f64) {
-    fn x(&self) -> f64 { self.0 }
-    fn y(&self) -> f64 { self.1 }
+    fn x(&self) -> f64 {
+        self.0
+    }
+    fn y(&self) -> f64 {
+        self.1
+    }
 }
 
 impl Coordinate for Point<f64> {
-    fn x(&self) -> f64 { Point::x(*self) }
-    fn y(&self) -> f64 { Point::y(*self) }
+    fn x(&self) -> f64 {
+        Point::x(*self)
+    }
+    fn y(&self) -> f64 {
+        Point::y(*self)
+    }
 }
 
 pub fn wgs84_to_bng<C: Coordinate>(coord: &C) -> Result<Point<f64>, N3gbError> {
     let proj = Proj::new_known_crs("EPSG:4326", "EPSG:27700", None)
         .map_err(|e| N3gbError::ProjectionError(e.to_string()))?;
 
-    let (easting, northing) = proj.convert((coord.x(), coord.y()))
+    let (easting, northing) = proj
+        .convert((coord.x(), coord.y()))
         .map_err(|e| N3gbError::ProjectionError(e.to_string()))?;
     Ok(Point::new(easting, northing))
 }
@@ -30,7 +39,8 @@ pub fn bng_to_wgs84<C: Coordinate>(coord: &C) -> Result<Point<f64>, N3gbError> {
     let proj = Proj::new_known_crs("EPSG:27700", "EPSG:4326", None)
         .map_err(|e| N3gbError::ProjectionError(e.to_string()))?;
 
-    let (lon, lat) = proj.convert((coord.x(), coord.y()))
+    let (lon, lat) = proj
+        .convert((coord.x(), coord.y()))
         .map_err(|e| N3gbError::ProjectionError(e.to_string()))?;
     Ok(Point::new(lon, lat))
 }

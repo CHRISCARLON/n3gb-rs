@@ -1,5 +1,5 @@
-use n3gb_rs::{HexCell, N3gbError, decode_hex_identifier};
 use geo_types::Point;
+use n3gb_rs::{HexCell, N3gbError, decode_hex_identifier};
 
 fn main() -> Result<(), N3gbError> {
     let wgs84_coord = Point::new(-2.2479699500757597, 53.48082746395233);

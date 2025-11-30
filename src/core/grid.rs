@@ -1,7 +1,7 @@
-use geo_types::Point;
 use crate::core::constants::{CELL_RADIUS, CELL_WIDTHS, GRID_EXTENTS, MAX_ZOOM_LEVEL};
-use crate::util::error::N3gbError;
 use crate::util::coord::Coordinate;
+use crate::util::error::N3gbError;
+use geo_types::Point;
 
 pub fn point_to_hex<C: Coordinate>(coord: &C, z: u8) -> Result<(i64, i64), N3gbError> {
     if z > MAX_ZOOM_LEVEL {

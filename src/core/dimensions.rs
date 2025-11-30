@@ -37,7 +37,6 @@ pub fn from_side(a: f64) -> Result<HexagonDims, N3gbError> {
     })
 }
 
-
 pub fn from_circumradius(r: f64) -> Result<HexagonDims, N3gbError> {
     from_side(r)
 }

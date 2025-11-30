@@ -1,7 +1,7 @@
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use base64::Engine;
 use crate::core::constants::{IDENTIFIER_VERSION, SCALE_FACTOR};
 use crate::util::error::N3gbError;
+use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
 pub fn generate_identifier(easting: f64, northing: f64, zoom_level: u8) -> String {
     let easting_int = (easting * SCALE_FACTOR as f64).round() as u64;

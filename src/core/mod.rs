@@ -5,8 +5,8 @@ pub mod grid;
 
 pub use constants::{CELL_RADIUS, CELL_WIDTHS, GRID_EXTENTS, IDENTIFIER_VERSION, MAX_ZOOM_LEVEL};
 pub use dimensions::{
-    bounding_box, from_across_corners, from_across_flats, from_apothem, from_area,
-    from_circumradius, from_side, HexagonDims,
+    HexagonDims, bounding_box, from_across_corners, from_across_flats, from_apothem, from_area,
+    from_circumradius, from_side,
 };
 pub use geometry::create_hexagon;
 pub use grid::{hex_to_point, point_to_hex};
