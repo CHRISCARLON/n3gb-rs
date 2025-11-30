@@ -1,5 +1,6 @@
+use std::time::Instant;
 use geo_types::Point;
-use n3gb_rs::{HexCell, N3gbError, decode_hex_identifier};
+use n3gb_rs::{HexCell, HexGrid, N3gbError, decode_hex_identifier};
 
 fn main() -> Result<(), N3gbError> {
     let wgs84_coord = Point::new(-2.2479699500757597, 53.48082746395233);
@@ -19,6 +20,15 @@ fn main() -> Result<(), N3gbError> {
     println!("  Easting: {}", easting);
     println!("  Northing: {}", northing);
     println!("  Zoom: {}", zoom_level);
+
+    let start = Instant::now();
+    let grid = HexGrid::builder()
+        .zoom_level(11)
+        .extent(300000.0, 300000.0, 400000.0, 400000.0)
+        .build();
+    let elapsed = start.elapsed();
+
+    println!("\nGrid generated: {} cells in {:?}", grid.len(), elapsed);
 
     Ok(())
 }

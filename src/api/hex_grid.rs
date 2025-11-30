@@ -3,6 +3,7 @@ use crate::core::constants::{GRID_EXTENTS, MAX_ZOOM_LEVEL};
 use crate::core::grid::{hex_to_point, point_to_hex};
 use crate::util::identifier::generate_identifier;
 use geo_types::{Point, Polygon, Rect};
+use rayon::prelude::*;
 
 #[derive(Debug, Clone)]
 pub struct HexGrid {
@@ -148,26 +149,21 @@ fn generate_cells_for_extent(
     let min_col = ll_col.min(lr_col).min(ur_col).min(ul_col);
     let max_col = ll_col.max(lr_col).max(ur_col).max(ul_col);
 
-    let mut hexagons = Vec::new();
-
-    for row in min_row..=max_row {
-        for col in min_col..=max_col {
-            let center = match hex_to_point(row, col, zoom_level) {
-                Ok(p) => p,
-                Err(_) => continue,
-            };
+    (min_row..=max_row)
+        .flat_map(|row| (min_col..=max_col).map(move |col| (row, col)))
+        .collect::<Vec<_>>()
+        .into_par_iter()
+        .filter_map(|(row, col)| {
+            let center = hex_to_point(row, col, zoom_level).ok()?;
 
             if center.x() < GRID_EXTENTS[0] || center.y() < GRID_EXTENTS[1] {
-                continue;
+                return None;
             }
 
             let id = generate_identifier(center.x(), center.y(), zoom_level);
-
-            hexagons.push(HexCell::new(id, center, zoom_level, row, col));
-        }
-    }
-
-    hexagons
+            Some(HexCell::new(id, center, zoom_level, row, col))
+        })
+        .collect()
 }
 
 #[cfg(test)]
