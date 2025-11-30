@@ -8,8 +8,7 @@
 //! use n3gb_rs::HexCell;
 //!
 //! # fn main() -> Result<(), n3gb_rs::N3gbError> {
-//! let cell = HexCell::from_wgs84(-2.248, 53.481, 12)?;
-//! let cell = HexCell::from_bng(383640.0, 398260.0, 12)?;
+//! let cell = HexCell::from_bng(&(383640.0, 398260.0), 12)?;
 //! println!("{}", cell.id);
 //! let polygon = cell.to_polygon();
 //! # Ok(())
@@ -43,12 +42,12 @@ pub use core::{
     CELL_RADIUS, CELL_WIDTHS, GRID_EXTENTS, IDENTIFIER_VERSION, MAX_ZOOM_LEVEL,
     bounding_box, from_across_corners, from_across_flats, from_apothem, from_area,
     from_circumradius, from_side, HexagonDims,
-    create_hexagon, create_hexagon_from_point,
-    hex_to_point, point_to_hex, point_to_hex_coord,
+    create_hexagon,
+    hex_to_point, point_to_hex,
 };
 pub use util::{
-    N3gbError,
-    bng_to_wgs84, bng_to_wgs84_point, wgs84_to_bng, wgs84_to_bng_point,
+    N3gbError, Coordinate,
+    bng_to_wgs84, wgs84_to_bng,
     decode_hex_identifier, generate_identifier,
 };
 
@@ -87,7 +86,7 @@ mod tests {
     #[test]
     fn test_using_geo_types_macros() -> Result<(), N3gbError> {
         let pt = point! { x: 457996.0, y: 339874.0 };
-        let (row, col) = point_to_hex_coord(&pt, 10)?;
+        let (row, col) = point_to_hex(&pt, 10)?;
         assert!(row > 0);
         assert!(col > 0);
 
@@ -136,7 +135,7 @@ mod tests {
 
     #[test]
     fn test_hexcell_from_bng() -> Result<(), N3gbError> {
-        let cell = HexCell::from_bng(383640.0, 398260.0, 12)?;
+        let cell = HexCell::from_bng(&(383640.0, 398260.0), 12)?;
 
         assert_eq!(cell.zoom_level, 12);
         assert!(!cell.id.is_empty());
@@ -150,7 +149,7 @@ mod tests {
 
     #[test]
     fn test_hexcell_from_wgs84() -> Result<(), N3gbError> {
-        let cell = HexCell::from_wgs84(-2.248, 53.481, 12)?;
+        let cell = HexCell::from_wgs84(&(-2.248, 53.481), 12)?;
 
         assert_eq!(cell.zoom_level, 12);
         assert!(!cell.id.is_empty());
@@ -161,7 +160,7 @@ mod tests {
 
     #[test]
     fn test_hexcell_consistency_with_hexgrid() -> Result<(), N3gbError> {
-        let cell_direct = HexCell::from_bng(457500.0, 340000.0, 10)?;
+        let cell_direct = HexCell::from_bng(&(457500.0, 340000.0), 10)?;
 
         let grid = HexGrid::from_extent(457000.0, 339500.0, 458000.0, 340500.0, 10);
         let pt = point! { x: 457500.0, y: 340000.0 };

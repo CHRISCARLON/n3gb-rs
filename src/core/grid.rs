@@ -1,8 +1,9 @@
 use geo_types::Point;
 use crate::core::constants::{CELL_RADIUS, CELL_WIDTHS, GRID_EXTENTS, MAX_ZOOM_LEVEL};
 use crate::util::error::N3gbError;
+use crate::util::coord::Coordinate;
 
-pub fn point_to_hex(x: f64, y: f64, z: u8) -> Result<(i64, i64), N3gbError> {
+pub fn point_to_hex<C: Coordinate>(coord: &C, z: u8) -> Result<(i64, i64), N3gbError> {
     if z > MAX_ZOOM_LEVEL {
         return Err(N3gbError::InvalidZoomLevel(z));
     }
@@ -12,17 +13,13 @@ pub fn point_to_hex(x: f64, y: f64, z: u8) -> Result<(i64, i64), N3gbError> {
     let dx = hex_width;
     let dy = 1.5 * r;
 
-    let qx = (x - GRID_EXTENTS[0]) / dx;
-    let ry = (y - GRID_EXTENTS[1]) / dy;
+    let qx = (coord.x() - GRID_EXTENTS[0]) / dx;
+    let ry = (coord.y() - GRID_EXTENTS[1]) / dy;
 
     let row = ry.round() as i64;
     let col = (qx - (row % 2) as f64).round() as i64;
 
     Ok((row, col))
-}
-
-pub fn point_to_hex_coord(point: &Point<f64>, z: u8) -> Result<(i64, i64), N3gbError> {
-    point_to_hex(point.x(), point.y(), z)
 }
 
 pub fn hex_to_point(row: i64, col: i64, z: u8) -> Result<Point<f64>, N3gbError> {
@@ -52,7 +49,7 @@ mod tests {
         let northing = 339874.0;
         let zoom = 10;
 
-        let (row, col) = point_to_hex(easting, northing, zoom)?;
+        let (row, col) = point_to_hex(&(easting, northing), zoom)?;
         let point = hex_to_point(row, col, zoom)?;
 
         assert!((point.x() - 457925.0).abs() < 100.0);
@@ -61,11 +58,11 @@ mod tests {
     }
 
     #[test]
-    fn test_point_to_hex_coord() -> Result<(), N3gbError> {
+    fn test_point_to_hex_with_point() -> Result<(), N3gbError> {
         let pt = point! { x: 457996.0, y: 339874.0 };
         let zoom = 10;
 
-        let (row, col) = point_to_hex_coord(&pt, zoom)?;
+        let (row, col) = point_to_hex(&pt, zoom)?;
         let center = hex_to_point(row, col, zoom)?;
 
         assert!((center.x() - 457925.0).abs() < 100.0);
@@ -75,7 +72,7 @@ mod tests {
 
     #[test]
     fn test_invalid_zoom_level() {
-        let result = point_to_hex(457996.0, 339874.0, 20);
+        let result = point_to_hex(&(457996.0, 339874.0), 20);
         assert!(matches!(result, Err(N3gbError::InvalidZoomLevel(20))));
     }
 

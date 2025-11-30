@@ -46,7 +46,7 @@ impl HexGrid {
     }
 
     pub fn get_cell_at(&self, point: &Point<f64>) -> Option<&HexCell> {
-        let (row, col) = point_to_hex(point.x(), point.y(), self.zoom_level).ok()?;
+        let (row, col) = point_to_hex(point, self.zoom_level).ok()?;
         self.cells
             .iter()
             .find(|cell| cell.row == row && cell.col == col)
@@ -123,19 +123,19 @@ fn generate_cells_for_extent(
         return Vec::new();
     }
 
-    let (ll_row, ll_col) = match point_to_hex(min_x, min_y, zoom_level) {
+    let (ll_row, ll_col) = match point_to_hex(&(min_x, min_y), zoom_level) {
         Ok(v) => v,
         Err(_) => return Vec::new(),
     };
-    let (lr_row, lr_col) = match point_to_hex(max_x, min_y, zoom_level) {
+    let (lr_row, lr_col) = match point_to_hex(&(max_x, min_y), zoom_level) {
         Ok(v) => v,
         Err(_) => return Vec::new(),
     };
-    let (ur_row, ur_col) = match point_to_hex(max_x, max_y, zoom_level) {
+    let (ur_row, ur_col) = match point_to_hex(&(max_x, max_y), zoom_level) {
         Ok(v) => v,
         Err(_) => return Vec::new(),
     };
-    let (ul_row, ul_col) = match point_to_hex(min_x, max_y, zoom_level) {
+    let (ul_row, ul_col) = match point_to_hex(&(min_x, max_y), zoom_level) {
         Ok(v) => v,
         Err(_) => return Vec::new(),
     };

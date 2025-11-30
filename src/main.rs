@@ -1,10 +1,10 @@
 use n3gb_rs::{HexCell, N3gbError, decode_hex_identifier};
+use geo_types::Point;
 
 fn main() -> Result<(), N3gbError> {
-    let lon = -2.2479699500757597;
-    let lat = 53.48082746395233;
+    let wgs84_coord = Point::new(-2.2479699500757597, 53.48082746395233);
 
-    let cell = HexCell::from_wgs84(lon, lat, 12)?;
+    let cell = HexCell::from_wgs84(&wgs84_coord, 12)?;
 
     println!("Hex ID: {}", cell.id);
     println!("Center: ({}, {})", cell.easting(), cell.northing());
