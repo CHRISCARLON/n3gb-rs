@@ -14,7 +14,7 @@ Creating a HexCell
 
 Reconstructing from ID
 
-1. decode_hex_identifier — Decodes the Base64 string back into center_x, center_y, and zoom.
+1. decode_hex_identifier — Decodes the Base64 string back into version, center_x, center_y, and zoom.
 2. create_hexagon — Draws 6 vertices around the center at the radius for that zoom level.
 
 How polygons maintain the offset structure?
@@ -25,10 +25,11 @@ How polygons maintain the offset structure?
 
 ## Lib currently has two main entry points
 
-**1. Single cells** - use `HexCell`
+**1. Single Cells** - use `HexCell`
 
 ```rust
-let cell = HexCell::from_bng(383640.0, 398260.0, 12)?; // BNG
+let point = Point::new(383640.0, 398260.0);
+let cell = HexCell::from_bng(&point, 12)?;
 println!("{}", cell.id);
 let polygon = cell.to_polygon();
 ```
@@ -42,7 +43,7 @@ Row: 25548, Col: 21313
 Polygon: POLYGON((383643.0 398259.1024383498,383634.0 398264.2985907725,383625.0 398259.1024383498,383625.0 398248.7101335044,383634.0 398243.5139810817,383643.0 398248.7101335044,383643.0 398259.1024383498))
 ```
 
-**2. Cell collections** - use `HexGrid`
+**2. Cell Collections** - use `HexGrid`
 
 ```rust
 let grid = HexGrid::builder()
