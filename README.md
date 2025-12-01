@@ -1,6 +1,6 @@
 # n3gb-rs
 
-Rust implemented of a hex-based spatial indexing for British National Grid.
+Rust implementation of a hex-based spatial indexing for British National Grid.
 
 Inspired by the work done by [GDS NUAR n3gb](https://github.com/national-underground-asset-register/n3gb).
 
