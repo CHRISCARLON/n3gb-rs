@@ -48,7 +48,7 @@ Polygon: POLYGON((383643.0 398259.1024383498,383634.0 398264.2985907725,383625.0
 ```rust
 let grid = HexGrid::builder()
     .zoom_level(12)
-    .extent(383500.0, 397800.0, 384000.0, 398500.0)
+    .bng_extent(&(300000.0, 300000.0), &(350000.0, 350000.0))
     .build();
 
 if let Some(cell) = grid.get_cell_at(&point) {

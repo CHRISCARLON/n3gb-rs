@@ -23,7 +23,7 @@
 //!
 //! let grid = HexGrid::builder()
 //!     .zoom_level(10)
-//!     .extent(457000.0, 339500.0, 458000.0, 340500.0)
+//!     .bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0))
 //!     .build();
 //!
 //! let pt = point! { x: 457500.0, y: 340000.0 };
@@ -58,7 +58,7 @@ mod tests {
     fn test_end_to_end_workflow() -> Result<(), N3gbError> {
         let grid = HexGrid::builder()
             .zoom_level(10)
-            .extent(457000.0, 339500.0, 458000.0, 340500.0)
+            .bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0))
             .build();
 
         assert!(!grid.is_empty());
@@ -109,7 +109,7 @@ mod tests {
 
     #[test]
     fn test_grid_iteration() {
-        let grid = HexGrid::from_extent(457000.0, 339500.0, 458000.0, 340500.0, 10);
+        let grid = HexGrid::from_bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0), 10);
 
         let mut count = 0;
         for cell in grid.iter() {
@@ -122,7 +122,7 @@ mod tests {
 
     #[test]
     fn test_grid_filtering() {
-        let grid = HexGrid::from_extent(457000.0, 339500.0, 458000.0, 340500.0, 10);
+        let grid = HexGrid::from_bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0), 10);
 
         let high_easting = grid.filter(|cell| cell.easting() > 457500.0);
         assert!(!high_easting.is_empty());
@@ -158,7 +158,7 @@ mod tests {
     fn test_hexcell_consistency_with_hexgrid() -> Result<(), N3gbError> {
         let cell_direct = HexCell::from_bng(&(457500.0, 340000.0), 10)?;
 
-        let grid = HexGrid::from_extent(457000.0, 339500.0, 458000.0, 340500.0, 10);
+        let grid = HexGrid::from_bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0), 10);
         let pt = point! { x: 457500.0, y: 340000.0 };
         let cell_from_grid = grid.get_cell_at(&pt);
 

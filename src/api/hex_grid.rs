@@ -1,6 +1,8 @@
-use crate::api::cell::HexCell;
+use crate::api::hex_cell::HexCell;
 use crate::core::constants::{GRID_EXTENTS, MAX_ZOOM_LEVEL};
 use crate::core::grid::{hex_to_point, point_to_hex};
+use crate::util::coord::{wgs84_to_bng, Coordinate};
+use crate::util::error::N3gbError;
 use crate::util::identifier::generate_identifier;
 use geo_types::{Point, Polygon, Rect};
 use rayon::prelude::*;
@@ -16,7 +18,7 @@ impl HexGrid {
         HexGridBuilder::new()
     }
 
-    pub fn from_extent(min_x: f64, min_y: f64, max_x: f64, max_y: f64, zoom_level: u8) -> Self {
+    fn from_extent(min_x: f64, min_y: f64, max_x: f64, max_y: f64, zoom_level: u8) -> Self {
         let cells = generate_cells_for_extent(min_x, min_y, max_x, max_y, zoom_level);
         Self { cells, zoom_level }
     }
@@ -29,6 +31,65 @@ impl HexGrid {
             rect.max().y,
             zoom_level,
         )
+    }
+
+    /// Create a HexGrid from British National Grid coordinates
+    ///
+    /// # Example
+    /// ```
+    /// use n3gb_rs::HexGrid;
+    /// use geo_types::Point;
+    ///
+    /// // From tuples
+    /// let grid = HexGrid::from_bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0), 10);
+    /// // From Points
+    /// let grid = HexGrid::from_bng_extent(
+    ///     &Point::new(457000.0, 339500.0),
+    ///     &Point::new(458000.0, 340500.0),
+    ///     10
+    /// );
+    /// ```
+    pub fn from_bng_extent(
+        min: &impl Coordinate,
+        max: &impl Coordinate,
+        zoom_level: u8,
+    ) -> Self {
+        Self::from_extent(min.x(), min.y(), max.x(), max.y(), zoom_level)
+    }
+
+    /// Create a HexGrid from WGS84 (lon/lat) coordinates
+    ///
+    /// # Example
+    /// ```
+    /// use n3gb_rs::HexGrid;
+    /// use geo_types::Point;
+    ///
+    /// # fn main() -> Result<(), n3gb_rs::N3gbError> {
+    /// // From tuples (lon, lat)
+    /// let grid = HexGrid::from_wgs84_extent(&(-2.3, 53.4), &(-2.2, 53.5), 10)?;
+    /// // From Points
+    /// let grid = HexGrid::from_wgs84_extent(
+    ///     &Point::new(-2.3, 53.4),
+    ///     &Point::new(-2.2, 53.5),
+    ///     10
+    /// )?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn from_wgs84_extent(
+        min: &impl Coordinate,
+        max: &impl Coordinate,
+        zoom_level: u8,
+    ) -> Result<Self, N3gbError> {
+        let min_bng = wgs84_to_bng(min)?;
+        let max_bng = wgs84_to_bng(max)?;
+        Ok(Self::from_extent(
+            min_bng.x(),
+            min_bng.y(),
+            max_bng.x(),
+            max_bng.y(),
+            zoom_level,
+        ))
     }
 
     pub fn zoom_level(&self) -> u8 {
@@ -89,20 +150,59 @@ impl HexGridBuilder {
         self
     }
 
-    pub fn extent(mut self, min_x: f64, min_y: f64, max_x: f64, max_y: f64) -> Self {
-        self.min_x = Some(min_x);
-        self.min_y = Some(min_y);
-        self.max_x = Some(max_x);
-        self.max_y = Some(max_y);
-        self
-    }
-
     pub fn rect(mut self, rect: &Rect<f64>) -> Self {
         self.min_x = Some(rect.min().x);
         self.min_y = Some(rect.min().y);
         self.max_x = Some(rect.max().x);
         self.max_y = Some(rect.max().y);
         self
+    }
+
+    /// Set extent from British National Grid coordinates
+    ///
+    /// # Example
+    /// ```
+    /// use n3gb_rs::HexGrid;
+    ///
+    /// let grid = HexGrid::builder()
+    ///     .zoom_level(10)
+    ///     .bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0))
+    ///     .build();
+    /// ```
+    pub fn bng_extent(mut self, min: &impl Coordinate, max: &impl Coordinate) -> Self {
+        self.min_x = Some(min.x());
+        self.min_y = Some(min.y());
+        self.max_x = Some(max.x());
+        self.max_y = Some(max.y());
+        self
+    }
+
+    /// Set extent from WGS84 (lon/lat) coordinates
+    ///
+    /// # Example
+    /// ```
+    /// use n3gb_rs::HexGrid;
+    ///
+    /// # fn main() -> Result<(), n3gb_rs::N3gbError> {
+    /// let grid = HexGrid::builder()
+    ///     .zoom_level(10)
+    ///     .wgs84_extent(&(-2.3, 53.4), &(-2.2, 53.5))?
+    ///     .build();
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn wgs84_extent(
+        mut self,
+        min: &impl Coordinate,
+        max: &impl Coordinate,
+    ) -> Result<Self, N3gbError> {
+        let min_bng = wgs84_to_bng(min)?;
+        let max_bng = wgs84_to_bng(max)?;
+        self.min_x = Some(min_bng.x());
+        self.min_y = Some(min_bng.y());
+        self.max_x = Some(max_bng.x());
+        self.max_y = Some(max_bng.y());
+        Ok(self)
     }
 
     pub fn build(self) -> HexGrid {
@@ -172,8 +272,8 @@ mod tests {
     use geo_types::{coord, point};
 
     #[test]
-    fn test_hex_grid_from_extent() {
-        let grid = HexGrid::from_extent(457000.0, 339500.0, 458000.0, 340500.0, 10);
+    fn test_hex_grid_from_bng_extent() {
+        let grid = HexGrid::from_bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0), 10);
         assert!(!grid.is_empty());
         assert_eq!(grid.zoom_level(), 10);
 
@@ -196,7 +296,7 @@ mod tests {
     fn test_hex_grid_builder() {
         let grid = HexGrid::builder()
             .zoom_level(10)
-            .extent(457000.0, 339500.0, 458000.0, 340500.0)
+            .bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0))
             .build();
 
         assert!(!grid.is_empty());
@@ -216,7 +316,7 @@ mod tests {
 
     #[test]
     fn test_get_cell_at() {
-        let grid = HexGrid::from_extent(457000.0, 339500.0, 458000.0, 340500.0, 10);
+        let grid = HexGrid::from_bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0), 10);
         let pt = point! { x: 457500.0, y: 340000.0 };
 
         let cell = grid.get_cell_at(&pt);
@@ -225,7 +325,7 @@ mod tests {
 
     #[test]
     fn test_filter_cells() {
-        let grid = HexGrid::from_extent(457000.0, 339500.0, 458000.0, 340500.0, 10);
+        let grid = HexGrid::from_bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0), 10);
 
         let filtered = grid.filter(|cell| cell.easting() > 457500.0);
         assert!(!filtered.is_empty());
@@ -233,9 +333,82 @@ mod tests {
 
     #[test]
     fn test_to_polygons() {
-        let grid = HexGrid::from_extent(457000.0, 339500.0, 458000.0, 340500.0, 10);
+        let grid = HexGrid::from_bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0), 10);
         let polygons = grid.to_polygons();
 
         assert_eq!(polygons.len(), grid.len());
+    }
+
+    #[test]
+    fn test_from_bng_extent_tuple() {
+        let grid = HexGrid::from_bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0), 10);
+        assert!(!grid.is_empty());
+        assert_eq!(grid.zoom_level(), 10);
+    }
+
+    #[test]
+    fn test_from_bng_extent_point() {
+        let grid = HexGrid::from_bng_extent(
+            &point! { x: 457000.0, y: 339500.0 },
+            &point! { x: 458000.0, y: 340500.0 },
+            10,
+        );
+        assert!(!grid.is_empty());
+        assert_eq!(grid.zoom_level(), 10);
+    }
+
+    #[test]
+    fn test_from_wgs84_extent_tuple() -> Result<(), N3gbError> {
+        let grid = HexGrid::from_wgs84_extent(&(-2.3, 53.4), &(-2.2, 53.5), 10)?;
+        assert!(!grid.is_empty());
+        assert_eq!(grid.zoom_level(), 10);
+
+        for cell in grid.iter() {
+            assert_eq!(cell.zoom_level, 10);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_from_wgs84_extent_point() -> Result<(), N3gbError> {
+        let grid = HexGrid::from_wgs84_extent(
+            &point! { x: -2.3, y: 53.4 },
+            &point! { x: -2.2, y: 53.5 },
+            10,
+        )?;
+        assert!(!grid.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn test_builder_bng_extent() {
+        let grid = HexGrid::builder()
+            .zoom_level(10)
+            .bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0))
+            .build();
+
+        assert!(!grid.is_empty());
+        assert_eq!(grid.zoom_level(), 10);
+    }
+
+    #[test]
+    fn test_builder_wgs84_extent() -> Result<(), N3gbError> {
+        let grid = HexGrid::builder()
+            .zoom_level(10)
+            .wgs84_extent(&(-2.3, 53.4), &(-2.2, 53.5))?
+            .build();
+
+        assert!(!grid.is_empty());
+        assert_eq!(grid.zoom_level(), 10);
+        Ok(())
+    }
+
+    #[test]
+    fn test_bng_and_wgs84_same_area() -> Result<(), N3gbError> {
+        let bng_grid = HexGrid::from_bng_extent(&(383000.0, 383000.0), &(384000.0, 384000.0), 10);
+        let wgs84_grid = HexGrid::from_wgs84_extent(&(-2.26, 53.39), &(-2.24, 53.40), 10)?;
+        assert!(!bng_grid.is_empty());
+        assert!(!wgs84_grid.is_empty());
+        Ok(())
     }
 }
