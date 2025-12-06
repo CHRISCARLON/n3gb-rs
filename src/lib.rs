@@ -37,7 +37,9 @@ pub mod api;
 pub mod core;
 pub mod util;
 
-pub use api::{HexCell, HexGrid, HexGridBuilder};
+pub use api::{
+    HexCell, HexCellsToArrow, HexCellsToGeoParquet, HexGrid, HexGridBuilder, write_geoparquet,
+};
 pub use core::{
     CELL_RADIUS, CELL_WIDTHS, GRID_EXTENTS, HexagonDims, IDENTIFIER_VERSION, MAX_ZOOM_LEVEL,
     bounding_box, create_hexagon, from_across_corners, from_across_flats, from_apothem, from_area,
@@ -48,6 +50,9 @@ pub use util::{
 };
 
 pub use geo_types;
+pub use geoarrow_array;
+pub use geoarrow_schema;
+pub use geoparquet;
 
 #[cfg(test)]
 mod tests {

@@ -1,11 +1,16 @@
+use crate::api::hex_arrow::HexCellsToArrow;
 use crate::api::hex_cell::HexCell;
+use crate::api::hex_parquet::HexCellsToGeoParquet;
+use arrow_array::RecordBatch;
 use crate::core::constants::{GRID_EXTENTS, MAX_ZOOM_LEVEL};
 use crate::core::grid::{hex_to_point, point_to_hex};
 use crate::util::coord::{wgs84_to_bng, Coordinate};
 use crate::util::error::N3gbError;
 use crate::util::identifier::generate_identifier;
 use geo_types::{Point, Polygon, Rect};
+use geoarrow_array::array::{PointArray, PolygonArray};
 use rayon::prelude::*;
+use std::path::Path;
 
 #[derive(Debug, Clone)]
 pub struct HexGrid {
@@ -128,6 +133,22 @@ impl HexGrid {
         F: Fn(&HexCell) -> bool,
     {
         self.cells.iter().filter(|cell| predicate(cell)).collect()
+    }
+
+    pub fn to_arrow_points(&self) -> PointArray {
+        self.cells.to_arrow_points()
+    }
+
+    pub fn to_arrow_polygons(&self) -> PolygonArray {
+        self.cells.to_arrow_polygons()
+    }
+
+    pub fn to_record_batch(&self) -> Result<RecordBatch, N3gbError> {
+        self.cells.to_record_batch()
+    }
+
+    pub fn to_geoparquet(&self, path: impl AsRef<Path>) -> Result<(), N3gbError> {
+        self.cells.to_geoparquet(path)
     }
 }
 

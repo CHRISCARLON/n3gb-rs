@@ -7,6 +7,7 @@ pub enum N3gbError {
     InvalidDimension(String),
     Base64DecodeError,
     ProjectionError(String),
+    IoError(String),
 }
 
 impl std::fmt::Display for N3gbError {
@@ -19,6 +20,7 @@ impl std::fmt::Display for N3gbError {
             N3gbError::InvalidDimension(msg) => write!(f, "Invalid dimension: {}", msg),
             N3gbError::Base64DecodeError => write!(f, "Base64 decode error"),
             N3gbError::ProjectionError(msg) => write!(f, "Projection error: {}", msg),
+            N3gbError::IoError(msg) => write!(f, "IO error: {}", msg),
         }
     }
 }

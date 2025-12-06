@@ -1,34 +1,52 @@
 use std::time::Instant;
-use geo_types::Point;
-use n3gb_rs::{HexCell, HexGrid, N3gbError, decode_hex_identifier};
+use arrow_array::{StringArray, UInt8Array, Int64Array, Float64Array};
+use n3gb_rs::{HexGrid, N3gbError, write_geoparquet};
 
 fn main() -> Result<(), N3gbError> {
-    let wgs84_coord = Point::new(-2.2479699500757597, 53.48082746395233);
-
-    let cell = HexCell::from_wgs84(&wgs84_coord, 12)?;
-
-    println!("Hex ID: {}", cell.id);
-    println!("Center: ({}, {})", cell.easting(), cell.northing());
-    println!("Row: {}, Col: {}", cell.row, cell.col);
-
-    let polygon = cell.to_polygon();
-    println!("Polygon: {:?}", polygon);
-
-    let (version, easting, northing, zoom_level) = decode_hex_identifier(&cell.id)?;
-    println!("\nDecoded from ID:");
-    println!("  Version: {}", version);
-    println!("  Easting: {}", easting);
-    println!("  Northing: {}", northing);
-    println!("  Zoom: {}", zoom_level);
-
     let start = Instant::now();
     let grid = HexGrid::builder()
         .zoom_level(12)
-        .bng_extent(&(300000.0, 300000.0), &(350000.0, 350000.0))
+        .bng_extent(&(530000.0, 180000.0), &(535000.0, 185000.0))
         .build();
-    let elapsed = start.elapsed();
+    let grid_time = start.elapsed();
 
-    println!("\nGrid generated: {} cells in {:?}", grid.len(), elapsed);
+    println!("Grid generated: {} cells in {:?}", grid.len(), grid_time);
+
+    let start = Instant::now();
+    let batch = grid.to_record_batch()?;
+    let batch_time = start.elapsed();
+
+    println!("\nRecordBatch: {} rows, {} columns in {:?}", batch.num_rows(), batch.num_columns(), batch_time);
+    println!("Schema:");
+    for field in batch.schema().fields() {
+        println!("  - {}: {:?}", field.name(), field.data_type());
+        if !field.metadata().is_empty() {
+            for (k, v) in field.metadata() {
+                println!("      {}: {}", k, v);
+            }
+        }
+    }
+
+    // Print first 5 rows from the arrow batch
+    let ids = batch.column(0).as_any().downcast_ref::<StringArray>().unwrap();
+    let zooms = batch.column(1).as_any().downcast_ref::<UInt8Array>().unwrap();
+    let rows = batch.column(2).as_any().downcast_ref::<Int64Array>().unwrap();
+    let cols = batch.column(3).as_any().downcast_ref::<Int64Array>().unwrap();
+    let eastings = batch.column(4).as_any().downcast_ref::<Float64Array>().unwrap();
+    let northings = batch.column(5).as_any().downcast_ref::<Float64Array>().unwrap();
+
+    println!("\nFirst 5 rows:");
+    for i in 0..5.min(batch.num_rows()) {
+        println!("  {} | zoom={} | row={} col={} | E={:.1} N={:.1}",
+            ids.value(i), zooms.value(i), rows.value(i), cols.value(i),
+            eastings.value(i), northings.value(i));
+    }
+
+    let start = Instant::now();
+    write_geoparquet(&batch, "grid.parquet")?;
+    let parquet_time = start.elapsed();
+
+    println!("\nGeoParquet written in {:?}", parquet_time);
 
     Ok(())
 }

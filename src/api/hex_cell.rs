@@ -1,10 +1,15 @@
+use crate::api::hex_arrow::HexCellsToArrow;
+use crate::api::hex_parquet::HexCellsToGeoParquet;
 use crate::core::constants::CELL_RADIUS;
 use crate::core::geometry::create_hexagon;
 use crate::core::grid::{hex_to_point, point_to_hex};
-use crate::util::coord::{Coordinate, wgs84_to_bng};
+use crate::util::coord::{wgs84_to_bng, Coordinate};
 use crate::util::error::N3gbError;
 use crate::util::identifier::{decode_hex_identifier, generate_identifier};
+use arrow_array::RecordBatch;
 use geo_types::{Point, Polygon};
+use geoarrow_array::array::{PointArray, PolygonArray};
+use std::path::Path;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct HexCell {
@@ -113,6 +118,22 @@ impl HexCell {
 
     pub fn to_polygon(&self) -> Polygon<f64> {
         create_hexagon(&self.center, CELL_RADIUS[self.zoom_level as usize])
+    }
+
+    pub fn to_arrow_points(&self) -> PointArray {
+        std::slice::from_ref(self).to_arrow_points()
+    }
+
+    pub fn to_arrow_polygons(&self) -> PolygonArray {
+        std::slice::from_ref(self).to_arrow_polygons()
+    }
+
+    pub fn to_record_batch(&self) -> Result<RecordBatch, N3gbError> {
+        std::slice::from_ref(self).to_record_batch()
+    }
+
+    pub fn to_geoparquet(&self, path: impl AsRef<Path>) -> Result<(), N3gbError> {
+        std::slice::from_ref(self).to_geoparquet(path)
     }
 }
 
