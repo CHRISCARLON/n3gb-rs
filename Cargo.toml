@@ -4,15 +4,15 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-arrow-array = "56"
-arrow-schema = "56"
+arrow-array = "56.2.0"
+arrow-schema = "56.2.0"
 base64 = "0.22.1"
-geo-types = "0.7.17"
+geo-types = "0.7.18"
 geoarrow = "0.6.2"
 geoarrow-array = "0.6.2"
 geoarrow-schema = "0.6.2"
 geoparquet = "0.6.2"
-parquet = { version = "56", features = ["arrow"] }
+parquet = { version = "56.2.0", features = ["arrow"] }
 proj = "0.31.0"
 rayon = "1.11"
 serde = { version = "1.0.228", features = ["derive"] }
