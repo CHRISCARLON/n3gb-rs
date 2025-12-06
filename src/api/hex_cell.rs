@@ -3,12 +3,13 @@ use crate::api::hex_parquet::HexCellsToGeoParquet;
 use crate::core::constants::CELL_RADIUS;
 use crate::core::geometry::create_hexagon;
 use crate::core::grid::{hex_to_point, point_to_hex};
-use crate::util::coord::{wgs84_to_bng, Coordinate};
+use crate::util::coord::{Coordinate, wgs84_to_bng};
 use crate::util::error::N3gbError;
 use crate::util::identifier::{decode_hex_identifier, generate_identifier};
 use arrow_array::RecordBatch;
-use geo_types::{Point, Polygon};
+use geo_types::{LineString, Point, Polygon};
 use geoarrow_array::array::{PointArray, PolygonArray};
+use std::collections::HashSet;
 use std::path::Path;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -55,6 +56,53 @@ impl HexCell {
             row,
             col,
         })
+    }
+
+    pub fn from_line_string_bng(line: &LineString, zoom: u8) -> Result<Vec<Self>, N3gbError> {
+        let mut seen: HashSet<(i64, i64)> = HashSet::new();
+        let mut cells: Vec<HexCell> = Vec::new();
+
+        let step_size = CELL_RADIUS[zoom as usize] * 0.5;
+
+        for window in line.0.windows(2) {
+            let start = &window[0];
+            let end = &window[1];
+
+            let dx = end.x - start.x;
+            let dy = end.y - start.y;
+            let segment_length = (dx * dx + dy * dy).sqrt();
+            let steps = (segment_length / step_size).ceil() as usize;
+
+            for i in 0..=steps {
+                let t = if steps == 0 {
+                    0.0
+                } else {
+                    i as f64 / steps as f64
+                };
+                let x = start.x + t * dx;
+                let y = start.y + t * dy;
+
+                let (row, col) = point_to_hex(&(x, y), zoom)?;
+
+                if seen.insert((row, col)) {
+                    let cell = HexCell::from_bng(&(x, y), zoom)?;
+                    cells.push(cell);
+                }
+            }
+        }
+
+        Ok(cells)
+    }
+
+    pub fn from_line_string_wgs84(line: &LineString, zoom: u8) -> Result<Vec<Self>, N3gbError> {
+        let bng_coords: Result<Vec<_>, _> = line
+            .0
+            .iter()
+            .map(|coord| wgs84_to_bng(&(coord.x, coord.y)))
+            .collect();
+
+        let bng_line = LineString::from(bng_coords?);
+        Self::from_line_string_bng(&bng_line, zoom)
     }
 
     /// Create a HexCell from British National Grid coordinates
