@@ -85,8 +85,9 @@ impl HexCell {
                 let (row, col) = point_to_hex(&(x, y), zoom)?;
 
                 if seen.insert((row, col)) {
-                    let cell = HexCell::from_bng(&(x, y), zoom)?;
-                    cells.push(cell);
+                    let center = hex_to_point(row, col, zoom)?;
+                    let id = generate_identifier(center.x(), center.y(), zoom);
+                    cells.push(HexCell::new(id, center, zoom, row, col));
                 }
             }
         }

@@ -28,7 +28,7 @@ fn main() -> Result<(), N3gbError> {
     let start = Instant::now();
     let grid = HexGrid::builder()
         .zoom_level(12)
-        .bng_extent(&(530000.0, 180000.0), &(535000.0, 185000.0))
+        .bng_extent(&(500000.0, 150000.0), &(550000.0, 200000.0))
         .build();
     let grid_time = start.elapsed();
 
