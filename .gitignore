@@ -21,4 +21,4 @@ target
 .idea/
 
 # Other
-grid.parquet
+*.parquet

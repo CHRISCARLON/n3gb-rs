@@ -46,7 +46,7 @@ pub use core::{
     from_circumradius, from_side, hex_to_point, point_to_hex,
 };
 pub use util::{
-    Coordinate, N3gbError, bng_to_wgs84, decode_hex_identifier, generate_identifier, wgs84_to_bng,
+    Coordinate, N3gbError, decode_hex_identifier, generate_identifier, wgs84_to_bng,
 };
 
 pub use geo_types;

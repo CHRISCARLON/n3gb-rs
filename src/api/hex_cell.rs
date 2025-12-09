@@ -3,7 +3,7 @@ use crate::api::hex_parquet::HexCellsToGeoParquet;
 use crate::core::constants::CELL_RADIUS;
 use crate::core::geometry::create_hexagon;
 use crate::core::grid::{hex_to_point, point_to_hex};
-use crate::util::coord::{Coordinate, wgs84_to_bng};
+use crate::util::coord::{Coordinate, wgs84_line_to_bng, wgs84_to_bng};
 use crate::util::error::N3gbError;
 use crate::util::identifier::{decode_hex_identifier, generate_identifier};
 use arrow_array::RecordBatch;
@@ -59,10 +59,22 @@ impl HexCell {
     }
 
     pub fn from_line_string_bng(line: &LineString, zoom: u8) -> Result<Vec<Self>, N3gbError> {
-        let mut seen: HashSet<(i64, i64)> = HashSet::new();
-        let mut cells: Vec<HexCell> = Vec::new();
+        let cell_radius = CELL_RADIUS[zoom as usize];
+        let step_size = cell_radius * 0.5;
 
-        let step_size = CELL_RADIUS[zoom as usize] * 0.5;
+        let total_length: f64 = line
+            .0
+            .windows(2)
+            .map(|w| {
+                let dx = w[1].x - w[0].x;
+                let dy = w[1].y - w[0].y;
+                (dx * dx + dy * dy).sqrt()
+            })
+            .sum();
+        let estimated_cells = ((total_length / cell_radius) * 1.5) as usize + line.0.len();
+
+        let mut seen: HashSet<(i64, i64)> = HashSet::with_capacity(estimated_cells);
+        let mut cells: Vec<HexCell> = Vec::with_capacity(estimated_cells);
 
         for window in line.0.windows(2) {
             let start = &window[0];
@@ -96,13 +108,7 @@ impl HexCell {
     }
 
     pub fn from_line_string_wgs84(line: &LineString, zoom: u8) -> Result<Vec<Self>, N3gbError> {
-        let bng_coords: Result<Vec<_>, _> = line
-            .0
-            .iter()
-            .map(|coord| wgs84_to_bng(&(coord.x, coord.y)))
-            .collect();
-
-        let bng_line = LineString::from(bng_coords?);
+        let bng_line = wgs84_line_to_bng(line)?;
         Self::from_line_string_bng(&bng_line, zoom)
     }
 

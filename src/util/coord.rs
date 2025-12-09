@@ -1,6 +1,7 @@
 use crate::util::error::N3gbError;
-use geo_types::Point;
+use geo_types::{Coord, LineString, Point};
 use proj::Proj;
+use std::cell::RefCell;
 
 pub trait Coordinate {
     fn x(&self) -> f64;
@@ -25,24 +26,49 @@ impl Coordinate for Point<f64> {
     }
 }
 
-pub fn wgs84_to_bng<C: Coordinate>(coord: &C) -> Result<Point<f64>, N3gbError> {
-    let proj = Proj::new_known_crs("EPSG:4326", "EPSG:27700", None)
-        .map_err(|e| N3gbError::ProjectionError(e.to_string()))?;
-
-    let (easting, northing) = proj
-        .convert((coord.x(), coord.y()))
-        .map_err(|e| N3gbError::ProjectionError(e.to_string()))?;
-    Ok(Point::new(easting, northing))
+thread_local! {
+    static WGS84_TO_BNG_PROJ: RefCell<Option<Proj>> = const { RefCell::new(None) };
 }
 
-pub fn bng_to_wgs84<C: Coordinate>(coord: &C) -> Result<Point<f64>, N3gbError> {
-    let proj = Proj::new_known_crs("EPSG:27700", "EPSG:4326", None)
-        .map_err(|e| N3gbError::ProjectionError(e.to_string()))?;
+fn with_wgs84_to_bng_proj<T, F>(f: F) -> Result<T, N3gbError>
+where
+    F: FnOnce(&Proj) -> Result<T, N3gbError>,
+{
+    WGS84_TO_BNG_PROJ.with(|cell| {
+        let mut borrow = cell.borrow_mut();
+        if borrow.is_none() {
+            *borrow = Some(
+                Proj::new_known_crs("EPSG:4326", "EPSG:27700", None)
+                    .map_err(|e| N3gbError::ProjectionError(e.to_string()))?,
+            );
+        }
+        f(borrow.as_ref().unwrap())
+    })
+}
 
-    let (lon, lat) = proj
-        .convert((coord.x(), coord.y()))
-        .map_err(|e| N3gbError::ProjectionError(e.to_string()))?;
-    Ok(Point::new(lon, lat))
+pub fn wgs84_to_bng<C: Coordinate>(coord: &C) -> Result<Point<f64>, N3gbError> {
+    with_wgs84_to_bng_proj(|proj| {
+        let (easting, northing) = proj
+            .convert((coord.x(), coord.y()))
+            .map_err(|e| N3gbError::ProjectionError(e.to_string()))?;
+        Ok(Point::new(easting, northing))
+    })
+}
+
+pub fn wgs84_line_to_bng(line: &LineString) -> Result<LineString, N3gbError> {
+    with_wgs84_to_bng_proj(|proj| {
+        let coords: Result<Vec<Coord>, N3gbError> = line
+            .0
+            .iter()
+            .map(|c| {
+                let (e, n) = proj
+                    .convert((c.x, c.y))
+                    .map_err(|e| N3gbError::ProjectionError(e.to_string()))?;
+                Ok(Coord { x: e, y: n })
+            })
+            .collect();
+        Ok(LineString::new(coords?))
+    })
 }
 
 #[cfg(test)]
@@ -55,30 +81,6 @@ mod tests {
 
         assert!(bng.x() > 380000.0 && bng.x() < 390000.0);
         assert!(bng.y() > 390000.0 && bng.y() < 400000.0);
-        Ok(())
-    }
-
-    #[test]
-    fn test_roundtrip() -> Result<(), N3gbError> {
-        let lon = -2.2479699500757597;
-        let lat = 53.48082746395233;
-
-        let bng = wgs84_to_bng(&(lon, lat))?;
-        let back = bng_to_wgs84(&bng)?;
-
-        assert!((lon - back.x()).abs() < 0.0001);
-        assert!((lat - back.y()).abs() < 0.0001);
-        Ok(())
-    }
-
-    #[test]
-    fn test_point_conversion() -> Result<(), N3gbError> {
-        let wgs84_point = Point::new(-2.2479699500757597, 53.48082746395233);
-        let bng_point = wgs84_to_bng(&wgs84_point)?;
-        let back = bng_to_wgs84(&bng_point)?;
-
-        assert!((wgs84_point.x() - back.x()).abs() < 0.0001);
-        assert!((wgs84_point.y() - back.y()).abs() < 0.0001);
         Ok(())
     }
 
