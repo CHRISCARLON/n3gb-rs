@@ -2,24 +2,16 @@ use crate::api::hex_cell::HexCell;
 use crate::util::error::N3gbError;
 use arrow_array::{Float64Array, Int64Array, RecordBatch, StringArray, UInt8Array};
 use arrow_schema::{DataType, Field, Schema};
+use geoarrow_array::IntoArrow;
 use geoarrow_array::array::{PointArray, PolygonArray};
 use geoarrow_array::builder::{PointBuilder, PolygonBuilder};
-use geoarrow_array::IntoArrow;
 use geoarrow_schema::{Crs, Dimension, Metadata, PointType, PolygonType};
 use rayon::prelude::*;
-use serde_json::json;
 use std::sync::Arc;
 
-fn bng_crs() -> Crs {
-    Crs::from_projjson(json!({
-        "type": "ProjectedCRS",
-        "name": "OSGB 1936 / British National Grid",
-        "id": {"authority": "EPSG", "code": 27700}
-    }))
-}
-
 fn bng_metadata() -> Arc<Metadata> {
-    Arc::new(Metadata::new(bng_crs(), None))
+    let crs = Crs::from_authority_code("EPSG:27700".to_string());
+    Arc::new(Metadata::new(crs, None))
 }
 
 pub trait HexCellsToArrow {

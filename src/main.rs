@@ -3,7 +3,7 @@ use n3gb_rs::{HexCell, HexCellsToArrow, N3gbError, write_geoparquet};
 use std::time::Instant;
 
 fn main() -> Result<(), N3gbError> {
-    let base_coords = vec![
+    let base_coords = [
         (-2.248423716278411, 53.4804537960769),
         (-2.248817614533952, 53.480510340167925),
         (-2.249255070278722, 53.480573578320396),
@@ -29,7 +29,10 @@ fn main() -> Result<(), N3gbError> {
         })
         .collect();
 
-    println!("Converting {} LineStrings to hex cells (WGS84 -> BNG)...", NUM_LINES);
+    println!(
+        "Converting {} LineStrings to hex cells (WGS84 -> BNG)...",
+        NUM_LINES
+    );
     let start = Instant::now();
 
     let mut all_cells: Vec<HexCell> = Vec::new();
@@ -76,7 +79,10 @@ fn main() -> Result<(), N3gbError> {
     println!("WGS84 conversion: {:?}", conversion_time);
     println!("Arrow conversion: {:?}", arrow_time);
     println!("Parquet write: {:?}", parquet_time);
-    println!("Total time: {:?}", conversion_time + arrow_time + parquet_time);
+    println!(
+        "Total time: {:?}",
+        conversion_time + arrow_time + parquet_time
+    );
 
     Ok(())
 }
