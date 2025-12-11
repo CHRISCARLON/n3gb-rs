@@ -1,6 +1,7 @@
 use crate::util::error::N3gbError;
 use geo_types::{Coord, LineString, Point};
 use proj::Proj;
+use rayon::prelude::*;
 use std::cell::RefCell;
 
 pub trait Coordinate {
@@ -56,19 +57,19 @@ pub fn wgs84_to_bng<C: Coordinate>(coord: &C) -> Result<Point<f64>, N3gbError> {
 }
 
 pub fn wgs84_line_to_bng(line: &LineString) -> Result<LineString, N3gbError> {
-    with_wgs84_to_bng_proj(|proj| {
-        let coords: Result<Vec<Coord>, N3gbError> = line
-            .0
-            .iter()
-            .map(|c| {
+    let coords: Result<Vec<Coord>, N3gbError> = line
+        .0
+        .par_iter()
+        .map(|c| {
+            with_wgs84_to_bng_proj(|proj| {
                 let (e, n) = proj
                     .convert((c.x, c.y))
                     .map_err(|e| N3gbError::ProjectionError(e.to_string()))?;
                 Ok(Coord { x: e, y: n })
             })
-            .collect();
-        Ok(LineString::new(coords?))
-    })
+        })
+        .collect();
+    Ok(LineString::new(coords?))
 }
 
 #[cfg(test)]

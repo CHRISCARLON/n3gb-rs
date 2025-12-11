@@ -125,7 +125,7 @@ impl HexGrid {
     }
 
     pub fn to_polygons(&self) -> Vec<Polygon<f64>> {
-        self.cells.iter().map(|cell| cell.to_polygon()).collect()
+        self.cells.par_iter().map(|cell| cell.to_polygon()).collect()
     }
 
     pub fn filter<F>(&self, predicate: F) -> Vec<&HexCell>
