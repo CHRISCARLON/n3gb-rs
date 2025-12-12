@@ -28,14 +28,14 @@ impl Coordinate for Point<f64> {
 }
 
 thread_local! {
-    static WGS84_TO_BNG_PROJ: RefCell<Option<Proj>> = const { RefCell::new(None) };
+    static WGS84_TO_BNG_PROJ_OBJECT: RefCell<Option<Proj>> = const { RefCell::new(None) };
 }
 
-fn with_wgs84_to_bng_proj<T, F>(f: F) -> Result<T, N3gbError>
+fn with_wgs84_to_bng_proj<T, F>(proj_closure: F) -> Result<T, N3gbError>
 where
     F: FnOnce(&Proj) -> Result<T, N3gbError>,
 {
-    WGS84_TO_BNG_PROJ.with(|cell| {
+    WGS84_TO_BNG_PROJ_OBJECT.with(|cell| {
         let mut borrow = cell.borrow_mut();
         if borrow.is_none() {
             *borrow = Some(
@@ -43,7 +43,7 @@ where
                     .map_err(|e| N3gbError::ProjectionError(e.to_string()))?,
             );
         }
-        f(borrow.as_ref().unwrap())
+        proj_closure(borrow.as_ref().unwrap()) // Note to self to remember that this is where we deref and get the &Proj to call the closure we passed in
     })
 }
 
