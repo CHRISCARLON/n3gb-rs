@@ -1,17 +1,43 @@
 use crate::api::hex_arrow::HexCellsToArrow;
 use crate::api::hex_cell::HexCell;
 use crate::api::hex_parquet::HexCellsToGeoParquet;
-use arrow_array::RecordBatch;
 use crate::core::constants::{GRID_EXTENTS, MAX_ZOOM_LEVEL};
 use crate::core::grid::{hex_to_point, point_to_hex};
-use crate::util::coord::{wgs84_to_bng, Coordinate};
+use crate::util::coord::{Coordinate, wgs84_to_bng};
 use crate::util::error::N3gbError;
 use crate::util::identifier::generate_identifier;
+use arrow_array::RecordBatch;
 use geo_types::{Point, Polygon, Rect};
 use geoarrow_array::array::{PointArray, PolygonArray};
 use rayon::prelude::*;
 use std::path::Path;
 
+/// A collection of hexagonal cells covering a geographic extent.
+///
+/// `HexGrid` generates and manages multiple [`HexCell`]s for a given bounding box
+/// and zoom level. Use it when you need to work with multiple cells at once,
+/// such as tiling an area prior to performing spatial queries.
+///
+/// # Example
+///
+/// ```
+/// use n3gb_rs::HexGrid;
+/// use geo_types::point;
+///
+/// // Create a grid covering an area
+/// let grid = HexGrid::builder()
+///     .zoom_level(10)
+///     .bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0))
+///     .build();
+///
+/// println!("Grid contains {} cells", grid.len());
+///
+/// // Find which cell contains a point
+/// let pt = point! { x: 457500.0, y: 340000.0 };
+/// if let Some(cell) = grid.get_cell_at(&pt) {
+///     println!("Point is in cell: {}", cell.id);
+/// }
+/// ```
 #[derive(Debug, Clone)]
 pub struct HexGrid {
     cells: Vec<HexCell>,
@@ -19,6 +45,7 @@ pub struct HexGrid {
 }
 
 impl HexGrid {
+    /// Creates a new [`HexGridBuilder`] for grid construction.
     pub fn builder() -> HexGridBuilder {
         HexGridBuilder::new()
     }
@@ -28,6 +55,7 @@ impl HexGrid {
         Self { cells, zoom_level }
     }
 
+    /// Creates a HexGrid from a `geo_types::Rect` in BNG coordinates.
     pub fn from_rect(rect: &Rect<f64>, zoom_level: u8) -> Self {
         Self::from_extent(
             rect.min().x,
@@ -54,11 +82,7 @@ impl HexGrid {
     ///     10
     /// );
     /// ```
-    pub fn from_bng_extent(
-        min: &impl Coordinate,
-        max: &impl Coordinate,
-        zoom_level: u8,
-    ) -> Self {
+    pub fn from_bng_extent(min: &impl Coordinate, max: &impl Coordinate, zoom_level: u8) -> Self {
         Self::from_extent(min.x(), min.y(), max.x(), max.y(), zoom_level)
     }
 
@@ -97,26 +121,34 @@ impl HexGrid {
         ))
     }
 
+    /// Returns the zoom level of this grid.
     pub fn zoom_level(&self) -> u8 {
         self.zoom_level
     }
 
+    /// Returns the number of cells in this grid.
     pub fn len(&self) -> usize {
         self.cells.len()
     }
 
+    /// Returns `true` if the grid contains no cells.
     pub fn is_empty(&self) -> bool {
         self.cells.is_empty()
     }
 
+    /// Returns a slice of all cells in this grid.
     pub fn cells(&self) -> &[HexCell] {
         &self.cells
     }
 
+    /// Returns an iterator over the cells in this grid.
     pub fn iter(&self) -> impl Iterator<Item = &HexCell> {
         self.cells.iter()
     }
 
+    /// Finds the cell containing the given point, if any.
+    ///
+    /// Returns `None` if the point is outside the grid's extent.
     pub fn get_cell_at(&self, point: &Point<f64>) -> Option<&HexCell> {
         let (row, col) = point_to_hex(point, self.zoom_level).ok()?;
         self.cells
@@ -124,10 +156,15 @@ impl HexGrid {
             .find(|cell| cell.row == row && cell.col == col)
     }
 
+    /// Converts all cells to hexagonal polygons.
     pub fn to_polygons(&self) -> Vec<Polygon<f64>> {
-        self.cells.par_iter().map(|cell| cell.to_polygon()).collect()
+        self.cells
+            .par_iter()
+            .map(|cell| cell.to_polygon())
+            .collect()
     }
 
+    /// Returns cells matching the given predicate.
     pub fn filter<F>(&self, predicate: F) -> Vec<&HexCell>
     where
         F: Fn(&HexCell) -> bool,
@@ -135,23 +172,39 @@ impl HexGrid {
         self.cells.iter().filter(|cell| predicate(cell)).collect()
     }
 
+    /// Converts all cell centers to an Arrow PointArray.
     pub fn to_arrow_points(&self) -> PointArray {
         self.cells.to_arrow_points()
     }
 
+    /// Converts all cells to an Arrow PolygonArray.
     pub fn to_arrow_polygons(&self) -> PolygonArray {
         self.cells.to_arrow_polygons()
     }
 
+    /// Converts all cells to an Arrow RecordBatch with all attributes.
     pub fn to_record_batch(&self) -> Result<RecordBatch, N3gbError> {
         self.cells.to_record_batch()
     }
 
+    /// Writes all cells to a GeoParquet file.
     pub fn to_geoparquet(&self, path: impl AsRef<Path>) -> Result<(), N3gbError> {
         self.cells.to_geoparquet(path)
     }
 }
 
+/// Builder for constructing a [`HexGrid`] with a fluent API.
+///
+/// # Example
+///
+/// ```
+/// use n3gb_rs::HexGrid;
+///
+/// let grid = HexGrid::builder()
+///     .zoom_level(10)
+///     .bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0))
+///     .build();
+/// ```
 #[derive(Debug, Default)]
 pub struct HexGridBuilder {
     zoom_level: Option<u8>,
@@ -162,15 +215,18 @@ pub struct HexGridBuilder {
 }
 
 impl HexGridBuilder {
+    /// Creates a new builder with no parameters set.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Sets the zoom level (0-15).
     pub fn zoom_level(mut self, zoom_level: u8) -> Self {
         self.zoom_level = Some(zoom_level);
         self
     }
 
+    /// Sets the extent from a `geo_types::Rect` in BNG coordinates.
     pub fn rect(mut self, rect: &Rect<f64>) -> Self {
         self.min_x = Some(rect.min().x);
         self.min_y = Some(rect.min().y);
@@ -226,6 +282,11 @@ impl HexGridBuilder {
         Ok(self)
     }
 
+    /// Builds the [`HexGrid`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if `zoom_level` or extent have not been set.
     pub fn build(self) -> HexGrid {
         let zoom_level = self.zoom_level.expect("zoom_level must be set");
         let min_x = self.min_x.expect("extent must be set");

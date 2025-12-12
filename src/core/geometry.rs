@@ -1,6 +1,10 @@
 use crate::util::coord::Coordinate;
 use geo_types::{Coord, LineString, Polygon};
 
+/// Creates a hexagonal polygon centered at the given point.
+///
+/// Returns a pointy-top hexagon (vertices at top and bottom) with the specified
+/// circumradius (center to vertex distance).
 pub fn create_hexagon<C: Coordinate>(center: &C, size: f64) -> Polygon<f64> {
     let mut coords = Vec::with_capacity(7);
 

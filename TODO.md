@@ -1,4 +1,3 @@
 # TODO
 
-Improve arrow conversions
-Add in a from linestring method (find the unique hex ids that a pipe can go through)
+Allow a user to pass in a polygon and creat a grided area from that.

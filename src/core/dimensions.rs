@@ -1,16 +1,28 @@
 use crate::util::error::N3gbError;
 
+/// All dimensions of a regular hexagon computed from a single input measurement.
+///
+/// A regular hexagon has relationships between its various measurements.
+/// This struct contains all derived dimensions once you provide any one of them.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct HexagonDims {
+    /// Side length (same as circumradius for regular hexagons)
     pub a: f64,
+    /// Circumradius (center to vertex distance)
     pub r_circum: f64,
+    /// Apothem (center to edge midpoint distance)
     pub r_apothem: f64,
+    /// Distance across corners (vertex to opposite vertex)
     pub d_corners: f64,
+    /// Distance across flats (edge to opposite edge)
     pub d_flats: f64,
+    /// Total perimeter (6 * side length)
     pub perimeter: f64,
+    /// Total area
     pub area: f64,
 }
 
+/// Computes all hexagon dimensions from the side length.
 pub fn from_side(a: f64) -> Result<HexagonDims, N3gbError> {
     if a <= 0.0 {
         return Err(N3gbError::InvalidDimension(
@@ -37,10 +49,14 @@ pub fn from_side(a: f64) -> Result<HexagonDims, N3gbError> {
     })
 }
 
+/// Computes all hexagon dimensions from the circumradius.
+///
+/// For regular hexagons, circumradius equals side length.
 pub fn from_circumradius(r: f64) -> Result<HexagonDims, N3gbError> {
     from_side(r)
 }
 
+/// Computes all hexagon dimensions from the apothem (inradius).
 pub fn from_apothem(r: f64) -> Result<HexagonDims, N3gbError> {
     if r <= 0.0 {
         return Err(N3gbError::InvalidDimension(
@@ -53,6 +69,7 @@ pub fn from_apothem(r: f64) -> Result<HexagonDims, N3gbError> {
     from_side(a)
 }
 
+/// Computes all hexagon dimensions from the across-flats distance.
 pub fn from_across_flats(df: f64) -> Result<HexagonDims, N3gbError> {
     if df <= 0.0 {
         return Err(N3gbError::InvalidDimension(
@@ -65,6 +82,7 @@ pub fn from_across_flats(df: f64) -> Result<HexagonDims, N3gbError> {
     from_side(a)
 }
 
+/// Computes all hexagon dimensions from the across-corners distance.
 pub fn from_across_corners(dc: f64) -> Result<HexagonDims, N3gbError> {
     if dc <= 0.0 {
         return Err(N3gbError::InvalidDimension(
@@ -76,6 +94,7 @@ pub fn from_across_corners(dc: f64) -> Result<HexagonDims, N3gbError> {
     from_side(a)
 }
 
+/// Computes all hexagon dimensions from the area.
 pub fn from_area(area: f64) -> Result<HexagonDims, N3gbError> {
     if area <= 0.0 {
         return Err(N3gbError::InvalidDimension(
@@ -88,6 +107,9 @@ pub fn from_area(area: f64) -> Result<HexagonDims, N3gbError> {
     from_side(a)
 }
 
+/// Returns the bounding box dimensions (width, height) for a hexagon.
+///
+/// - `pointy_top`: If true, hexagon has vertices at top/bottom; if false, flat edges at top/bottom.
 pub fn bounding_box(a: f64, pointy_top: bool) -> Result<(f64, f64), N3gbError> {
     if a <= 0.0 {
         return Err(N3gbError::InvalidDimension(

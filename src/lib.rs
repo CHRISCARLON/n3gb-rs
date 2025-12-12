@@ -1,6 +1,6 @@
-//! # n3gb-rs - NUAR Hex-Based Spatial Indexing System
+//! # n3gb-rs
 //!
-//! ## Two Entry Points
+//! There are currently two main entry points that people might use.
 //!
 //! ### 1. `HexCell` - Single Cell Operations
 //!
@@ -45,9 +45,7 @@ pub use core::{
     bounding_box, create_hexagon, from_across_corners, from_across_flats, from_apothem, from_area,
     from_circumradius, from_side, hex_to_point, point_to_hex,
 };
-pub use util::{
-    Coordinate, N3gbError, decode_hex_identifier, generate_identifier, wgs84_to_bng,
-};
+pub use util::{Coordinate, N3gbError, decode_hex_identifier, generate_identifier, wgs84_to_bng};
 
 pub use geo_types;
 pub use geoarrow_array;

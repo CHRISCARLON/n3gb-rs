@@ -3,6 +3,10 @@ use crate::util::error::N3gbError;
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
+/// Generates a unique hex cell identifier from BNG coordinates and zoom level.
+///
+/// The identifier is a URL-safe Base64 string containing the version, coordinates,
+/// zoom level, and a checksum.
 pub fn generate_identifier(easting: f64, northing: f64, zoom_level: u8) -> String {
     let easting_int = (easting * SCALE_FACTOR as f64).round() as u64;
     let northing_int = (northing * SCALE_FACTOR as f64).round() as u64;
@@ -19,6 +23,9 @@ pub fn generate_identifier(easting: f64, northing: f64, zoom_level: u8) -> Strin
     URL_SAFE_NO_PAD.encode(&binary_data)
 }
 
+/// Decodes a hex cell identifier back to its components.
+///
+/// Returns `(version, easting, northing, zoom_level)`.
 pub fn decode_hex_identifier(identifier: &str) -> Result<(u8, f64, f64, u8), N3gbError> {
     let binary_data = URL_SAFE_NO_PAD
         .decode(identifier)

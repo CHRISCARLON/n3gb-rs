@@ -12,12 +12,38 @@ use geoarrow_array::array::{PointArray, PolygonArray};
 use std::collections::HashSet;
 use std::path::Path;
 
+/// A single hexagonal cell in the n3gb spatial indexing system.
+///
+/// Each `HexCell` represents one hexagon in the grid, with a unique identifier,
+/// center point in British National Grid (BNG) coordinates, and grid position.
+///
+/// # Example
+///
+/// ```
+/// use n3gb_rs::HexCell;
+///
+/// # fn main() -> Result<(), n3gb_rs::N3gbError> {
+/// // Create from BNG coordinates
+/// let cell = HexCell::from_bng(&(383640.0, 398260.0), 12)?;
+/// println!("Cell ID: {}", cell.id);
+/// println!("Center: ({}, {})", cell.easting(), cell.northing());
+///
+/// // Convert to polygon for GIS operations
+/// let polygon = cell.to_polygon();
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct HexCell {
+    /// Unique encoded identifier for this cell (Base64 URL-safe)
     pub id: String,
+    /// Center point in British National Grid coordinates (EPSG:27700)
     pub center: Point<f64>,
+    /// Zoom level (0-15), where higher values mean smaller cells
     pub zoom_level: u8,
+    /// Row index in the hexagonal grid
     pub row: i64,
+    /// Column index in the hexagonal grid
     pub col: i64,
 }
 
@@ -58,6 +84,9 @@ impl HexCell {
         })
     }
 
+    /// Create HexCells along a LineString in BNG coordinates.
+    ///
+    /// Samples points along the line and returns all unique cells that intersect it.
     pub fn from_line_string_bng(line: &LineString, zoom: u8) -> Result<Vec<Self>, N3gbError> {
         let cell_radius = CELL_RADIUS[zoom as usize];
         let step_size = cell_radius * 0.5;
@@ -107,6 +136,9 @@ impl HexCell {
         Ok(cells)
     }
 
+    /// Create HexCells along a LineString in WGS84 coordinates.
+    ///
+    /// Converts the line to BNG and returns all unique cells that intersect it.
     pub fn from_line_string_wgs84(line: &LineString, zoom: u8) -> Result<Vec<Self>, N3gbError> {
         let bng_line = wgs84_line_to_bng(line)?;
         Self::from_line_string_bng(&bng_line, zoom)
@@ -163,30 +195,40 @@ impl HexCell {
         Self::from_bng(&bng, zoom)
     }
 
+    /// Returns the easting (x-coordinate) of the cell center in meters.
     pub fn easting(&self) -> f64 {
         self.center.x()
     }
 
+    /// Returns the northing (y-coordinate) of the cell center in meters.
     pub fn northing(&self) -> f64 {
         self.center.y()
     }
 
+    /// Converts this cell to a hexagonal polygon.
+    ///
+    /// Returns a `geo_types::Polygon` representing the hexagon boundary,
+    /// suitable for spatial operations or GeoJSON export.
     pub fn to_polygon(&self) -> Polygon<f64> {
         create_hexagon(&self.center, CELL_RADIUS[self.zoom_level as usize])
     }
 
+    /// Converts this cell's center to an Arrow PointArray.
     pub fn to_arrow_points(&self) -> PointArray {
         std::slice::from_ref(self).to_arrow_points()
     }
 
+    /// Converts this cell to an Arrow PolygonArray.
     pub fn to_arrow_polygons(&self) -> PolygonArray {
         std::slice::from_ref(self).to_arrow_polygons()
     }
 
+    /// Converts this cell to an Arrow RecordBatch with all attributes.
     pub fn to_record_batch(&self) -> Result<RecordBatch, N3gbError> {
         std::slice::from_ref(self).to_record_batch()
     }
 
+    /// Writes this cell to a GeoParquet file.
     pub fn to_geoparquet(&self, path: impl AsRef<Path>) -> Result<(), N3gbError> {
         std::slice::from_ref(self).to_geoparquet(path)
     }
@@ -225,7 +267,7 @@ mod tests {
 
         assert_eq!(cell.zoom_level, 12);
         assert!(!cell.id.is_empty());
-        // Should be in Manchester area
+        // Should be Manchester area
         assert!(cell.easting() > 380000.0 && cell.easting() < 390000.0);
         assert!(cell.northing() > 390000.0 && cell.northing() < 400000.0);
         Ok(())

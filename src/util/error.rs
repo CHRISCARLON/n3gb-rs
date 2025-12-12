@@ -1,12 +1,21 @@
+/// Error type for n3gb-rs operations.
 #[derive(Debug, PartialEq)]
 pub enum N3gbError {
+    /// The hex identifier has an invalid length.
     InvalidIdentifierLength,
+    /// The hex identifier checksum validation failed.
     InvalidChecksum,
+    /// The identifier version is not supported.
     UnsupportedVersion(u8),
+    /// The zoom level is outside the valid range (0-15).
     InvalidZoomLevel(u8),
+    /// A hexagon dimension value is invalid (e.g., negative).
     InvalidDimension(String),
+    /// Failed to decode Base64 identifier.
     Base64DecodeError,
+    /// Coordinate projection failed (WGS84 to BNG).
     ProjectionError(String),
+    /// File I/O or serialization error.
     IoError(String),
 }
 

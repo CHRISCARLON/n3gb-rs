@@ -4,8 +4,14 @@ use proj::Proj;
 use rayon::prelude::*;
 use std::cell::RefCell;
 
+/// Trait for types that can provide x/y coordinates.
+///
+/// Implemented for `(f64, f64)` tuples and `geo_types::Point<f64>`.
+/// This allows functions to accept either type.
 pub trait Coordinate {
+    /// Returns the x-coordinate (easting or longitude).
     fn x(&self) -> f64;
+    /// Returns the y-coordinate (northing or latitude).
     fn y(&self) -> f64;
 }
 
@@ -47,6 +53,19 @@ where
     })
 }
 
+/// Converts WGS84 (longitude, latitude) coordinates to British National Grid.
+///
+/// # Example
+///
+/// ```
+/// use n3gb_rs::wgs84_to_bng;
+///
+/// # fn main() -> Result<(), n3gb_rs::N3gbError> {
+/// let bng = wgs84_to_bng(&(-2.248, 53.481))?;
+/// println!("Easting: {}, Northing: {}", bng.x(), bng.y());
+/// # Ok(())
+/// # }
+/// ```
 pub fn wgs84_to_bng<C: Coordinate>(coord: &C) -> Result<Point<f64>, N3gbError> {
     with_wgs84_to_bng_proj(|proj| {
         let (easting, northing) = proj

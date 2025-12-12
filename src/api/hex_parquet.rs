@@ -9,6 +9,9 @@ use parquet::arrow::ArrowWriter;
 use std::fs::File;
 use std::path::Path;
 
+/// Writes an Arrow RecordBatch to a GeoParquet file.
+///
+/// The batch should contain a geometry column (normally from [`HexCellsToArrow::to_record_batch`]).
 pub fn write_geoparquet(batch: &RecordBatch, path: impl AsRef<Path>) -> Result<(), N3gbError> {
     let schema = batch.schema();
 
@@ -43,7 +46,11 @@ pub fn write_geoparquet(batch: &RecordBatch, path: impl AsRef<Path>) -> Result<(
     Ok(())
 }
 
+/// Trait for writing collections of [`HexCell`]s directly to GeoParquet.
+///
+/// Implemented for `[HexCell]` and `Vec<HexCell>`.
 pub trait HexCellsToGeoParquet: HexCellsToArrow {
+    /// Writes cells to a GeoParquet file at the given path.
     fn to_geoparquet(&self, path: impl AsRef<Path>) -> Result<(), N3gbError>;
 }
 

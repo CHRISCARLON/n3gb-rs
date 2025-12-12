@@ -14,9 +14,15 @@ fn bng_metadata() -> Arc<Metadata> {
     Arc::new(Metadata::new(crs, None))
 }
 
+/// Trait for converting collections of [`HexCell`]s to Arrow arrays.
+///
+/// Implemented for `[HexCell]` and `Vec<HexCell>`.
 pub trait HexCellsToArrow {
+    /// Converts cell centers to an Arrow PointArray.
     fn to_arrow_points(&self) -> PointArray;
+    /// Converts cells to an Arrow PolygonArray of hexagons.
     fn to_arrow_polygons(&self) -> PolygonArray;
+    /// Converts cells to a RecordBatch with id, zoom_level, row, col, easting, northing, and geometry.
     fn to_record_batch(&self) -> Result<RecordBatch, N3gbError>;
 }
 

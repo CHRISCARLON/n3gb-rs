@@ -3,6 +3,9 @@ use crate::util::coord::Coordinate;
 use crate::util::error::N3gbError;
 use geo_types::Point;
 
+/// Converts a BNG coordinate to hex grid row/column indices.
+///
+/// Returns `(row, col)` for the cell containing the given point at the specified zoom level.
 pub fn point_to_hex<C: Coordinate>(coord: &C, z: u8) -> Result<(i64, i64), N3gbError> {
     if z > MAX_ZOOM_LEVEL {
         return Err(N3gbError::InvalidZoomLevel(z));
@@ -22,6 +25,9 @@ pub fn point_to_hex<C: Coordinate>(coord: &C, z: u8) -> Result<(i64, i64), N3gbE
     Ok((row, col))
 }
 
+/// Converts hex grid row/column indices to a BNG center point.
+///
+/// Returns the center point of the cell at the given row, column, and zoom level.
 pub fn hex_to_point(row: i64, col: i64, z: u8) -> Result<Point<f64>, N3gbError> {
     if z > MAX_ZOOM_LEVEL {
         return Err(N3gbError::InvalidZoomLevel(z));
