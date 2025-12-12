@@ -1,6 +1,6 @@
 [package]
 name = "n3gb-rs"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2024"
 description = "A Rust implementation of a hierarchical hex-based spatial indexing system based on the OSGB National Grid."
 license = "MIT"
