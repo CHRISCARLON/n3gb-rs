@@ -47,6 +47,7 @@ pub struct HexCell {
     pub col: i64,
 }
 
+// TODO: Maybe I could merge all the diff ways to create a HexCell into a
 impl HexCell {
     pub(crate) fn new(id: String, center: Point<f64>, zoom_level: u8, row: i64, col: i64) -> Self {
         Self {

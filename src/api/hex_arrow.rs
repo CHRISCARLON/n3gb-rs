@@ -28,8 +28,8 @@ pub trait HexCellsToArrow {
 
 impl HexCellsToArrow for [HexCell] {
     fn to_arrow_points(&self) -> PointArray {
-        let typ = PointType::new(Dimension::XY, bng_metadata());
-        let mut builder = PointBuilder::with_capacity(typ, self.len());
+        let point = PointType::new(Dimension::XY, bng_metadata());
+        let mut builder = PointBuilder::with_capacity(point, self.len());
 
         for cell in self {
             builder.push_point(Some(&cell.center));
@@ -37,15 +37,17 @@ impl HexCellsToArrow for [HexCell] {
         builder.finish()
     }
 
+    // TODO: Need to think about a way to avoid adding everying to an intermediary Vec
+    // Not sure yet what I could do
     fn to_arrow_polygons(&self) -> PolygonArray {
-        let typ = PolygonType::new(Dimension::XY, bng_metadata());
+        let poly = PolygonType::new(Dimension::XY, bng_metadata());
         let polygons: Vec<_> = self.par_iter().map(|c: &HexCell| c.to_polygon()).collect();
-        PolygonBuilder::from_polygons(&polygons, typ).finish()
+        PolygonBuilder::from_polygons(&polygons, poly).finish()
     }
 
+    // TODO: Currently just bangs it all into one RecordBatch is this the best way?
     fn to_record_batch(&self) -> Result<RecordBatch, N3gbError> {
         let polygon_array = self.to_arrow_polygons();
-
         let ids: StringArray = self.iter().map(|c| Some(c.id.as_str())).collect();
         let zoom_levels: UInt8Array = self.iter().map(|c| Some(c.zoom_level)).collect();
         let rows: Int64Array = self.iter().map(|c| Some(c.row)).collect();
