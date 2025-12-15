@@ -1,6 +1,6 @@
 [package]
 name = "n3gb-rs"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2024"
 description = "A Rust implementation of a hierarchical hex-based spatial indexing system based on the OSGB National Grid."
 license = "MIT"
@@ -11,6 +11,7 @@ keywords = ["hex", "grid", "gis", "geoparquet", "arrow"]
 arrow-array = "56.2.0"
 arrow-schema = "56.2.0"
 base64 = "0.22.1"
+geo = "0.32.0"
 geo-types = "0.7.18"
 geoarrow = "0.6.2"
 geoarrow-array = "0.6.2"

@@ -3,10 +3,11 @@ use crate::api::hex_cell::HexCell;
 use crate::api::hex_parquet::HexCellsToGeoParquet;
 use crate::core::constants::{GRID_EXTENTS, MAX_ZOOM_LEVEL};
 use crate::core::grid::{hex_to_point, point_to_hex};
-use crate::util::coord::{Coordinate, wgs84_to_bng};
+use crate::util::coord::{Coordinate, wgs84_polygon_to_bng, wgs84_to_bng};
 use crate::util::error::N3gbError;
 use crate::util::identifier::generate_identifier;
 use arrow_array::RecordBatch;
+use geo::{BoundingRect, Intersects};
 use geo_types::{Point, Polygon, Rect};
 use geoarrow_array::array::{PointArray, PolygonArray};
 use rayon::prelude::*;
@@ -121,6 +122,87 @@ impl HexGrid {
         ))
     }
 
+    /// Creates a HexGrid from a polygon in BNG coordinates.
+    ///
+    /// Generates hex cells for the polygon's bounding box, then filters
+    /// to only include cells whose hexagon intersects the polygon.
+    ///
+    /// # Example
+    /// ```
+    /// use n3gb_rs::HexGrid;
+    /// use geo_types::{Polygon, LineString, coord};
+    ///
+    /// let polygon = Polygon::new(
+    ///     LineString::from(vec![
+    ///         coord! { x: 457000.0, y: 339500.0 },
+    ///         coord! { x: 458000.0, y: 339500.0 },
+    ///         coord! { x: 458000.0, y: 340500.0 },
+    ///         coord! { x: 457000.0, y: 340500.0 },
+    ///         coord! { x: 457000.0, y: 339500.0 },
+    ///     ]),
+    ///     vec![],
+    /// );
+    /// let grid = HexGrid::from_bng_polygon(&polygon, 10);
+    /// assert!(!grid.is_empty());
+    /// ```
+    pub fn from_bng_polygon(polygon: &Polygon<f64>, zoom_level: u8) -> Self {
+        let bbox = match polygon.bounding_rect() {
+            Some(rect) => rect,
+            None => {
+                return Self {
+                    cells: Vec::new(),
+                    zoom_level,
+                };
+            }
+        };
+
+        let candidate_cells = generate_cells_for_extent(
+            bbox.min().x,
+            bbox.min().y,
+            bbox.max().x,
+            bbox.max().y,
+            zoom_level,
+        );
+
+        let cells: Vec<HexCell> = candidate_cells
+            .into_par_iter()
+            .filter(|cell| polygon.intersects(&cell.to_polygon()))
+            .collect();
+
+        Self { cells, zoom_level }
+    }
+
+    /// Creates a HexGrid from a polygon in WGS84 (lon/lat) coordinates.
+    ///
+    /// Projects the polygon to BNG, then generates hex cells for the
+    /// polygon's bounding box and filters to cells that intersect.
+    ///
+    /// # Example
+    /// ```
+    /// use n3gb_rs::HexGrid;
+    /// use geo_types::{Polygon, LineString, coord};
+    ///
+    /// # fn main() -> Result<(), n3gb_rs::N3gbError> {
+    /// let polygon = Polygon::new(
+    ///     LineString::from(vec![
+    ///         coord! { x: -2.3, y: 53.4 },
+    ///         coord! { x: -2.2, y: 53.4 },
+    ///         coord! { x: -2.2, y: 53.5 },
+    ///         coord! { x: -2.3, y: 53.5 },
+    ///         coord! { x: -2.3, y: 53.4 },
+    ///     ]),
+    ///     vec![],
+    /// );
+    /// let grid = HexGrid::from_wgs84_polygon(&polygon, 10)?;
+    /// assert!(!grid.is_empty());
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn from_wgs84_polygon(polygon: &Polygon<f64>, zoom_level: u8) -> Result<Self, N3gbError> {
+        let bng_polygon = wgs84_polygon_to_bng(polygon)?;
+        Ok(Self::from_bng_polygon(&bng_polygon, zoom_level))
+    }
+
     /// Returns the zoom level of this grid.
     pub fn zoom_level(&self) -> u8 {
         self.zoom_level
@@ -205,13 +287,14 @@ impl HexGrid {
 ///     .bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0))
 ///     .build();
 /// ```
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct HexGridBuilder {
     zoom_level: Option<u8>,
     min_x: Option<f64>,
     min_y: Option<f64>,
     max_x: Option<f64>,
     max_y: Option<f64>,
+    polygon: Option<Polygon<f64>>,
 }
 
 impl HexGridBuilder {
@@ -282,17 +365,86 @@ impl HexGridBuilder {
         Ok(self)
     }
 
+    /// Sets the geometry from a polygon in BNG coordinates.
+    ///
+    /// When a polygon is set, the grid will only include cells that
+    /// intersect the polygon, not the full bounding box.
+    ///
+    /// # Example
+    /// ```
+    /// use n3gb_rs::HexGrid;
+    /// use geo_types::{Polygon, LineString, coord};
+    ///
+    /// let polygon = Polygon::new(
+    ///     LineString::from(vec![
+    ///         coord! { x: 457000.0, y: 339500.0 },
+    ///         coord! { x: 458000.0, y: 339500.0 },
+    ///         coord! { x: 458000.0, y: 340500.0 },
+    ///         coord! { x: 457000.0, y: 340500.0 },
+    ///         coord! { x: 457000.0, y: 339500.0 },
+    ///     ]),
+    ///     vec![],
+    /// );
+    /// let grid = HexGrid::builder()
+    ///     .zoom_level(10)
+    ///     .bng_polygon(polygon)
+    ///     .build();
+    /// ```
+    pub fn bng_polygon(mut self, polygon: Polygon<f64>) -> Self {
+        self.polygon = Some(polygon);
+        self
+    }
+
+    /// Sets the geometry from a polygon in WGS84 (lon/lat) coordinates.
+    ///
+    /// Projects the polygon to BNG, then filters cells to those
+    /// that intersect the polygon.
+    ///
+    /// # Example
+    /// ```
+    /// use n3gb_rs::HexGrid;
+    /// use geo_types::{Polygon, LineString, coord};
+    ///
+    /// # fn main() -> Result<(), n3gb_rs::N3gbError> {
+    /// let polygon = Polygon::new(
+    ///     LineString::from(vec![
+    ///         coord! { x: -2.3, y: 53.4 },
+    ///         coord! { x: -2.2, y: 53.4 },
+    ///         coord! { x: -2.2, y: 53.5 },
+    ///         coord! { x: -2.3, y: 53.5 },
+    ///         coord! { x: -2.3, y: 53.4 },
+    ///     ]),
+    ///     vec![],
+    /// );
+    /// let grid = HexGrid::builder()
+    ///     .zoom_level(10)
+    ///     .wgs84_polygon(polygon)?
+    ///     .build();
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn wgs84_polygon(mut self, polygon: Polygon<f64>) -> Result<Self, N3gbError> {
+        let bng_polygon = wgs84_polygon_to_bng(&polygon)?;
+        self.polygon = Some(bng_polygon);
+        Ok(self)
+    }
+
     /// Builds the [`HexGrid`].
     ///
     /// # Panics
     ///
-    /// Panics if `zoom_level` or extent have not been set.
+    /// Panics if `zoom_level` has not been set, or if neither extent nor polygon has been set.
     pub fn build(self) -> HexGrid {
         let zoom_level = self.zoom_level.expect("zoom_level must be set");
-        let min_x = self.min_x.expect("extent must be set");
-        let min_y = self.min_y.expect("extent must be set");
-        let max_x = self.max_x.expect("extent must be set");
-        let max_y = self.max_y.expect("extent must be set");
+
+        if let Some(polygon) = self.polygon {
+            return HexGrid::from_bng_polygon(&polygon, zoom_level);
+        }
+
+        let min_x = self.min_x.expect("extent or polygon must be set");
+        let min_y = self.min_y.expect("extent or polygon must be set");
+        let max_x = self.max_x.expect("extent or polygon must be set");
+        let max_y = self.max_y.expect("extent or polygon must be set");
 
         HexGrid::from_extent(min_x, min_y, max_x, max_y, zoom_level)
     }
@@ -491,6 +643,113 @@ mod tests {
         let wgs84_grid = HexGrid::from_wgs84_extent(&(-2.26, 53.39), &(-2.24, 53.40), 10)?;
         assert!(!bng_grid.is_empty());
         assert!(!wgs84_grid.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn test_from_bng_polygon() {
+        use geo_types::LineString;
+
+        let polygon = Polygon::new(
+            LineString::from(vec![
+                coord! { x: 457000.0, y: 339500.0 },
+                coord! { x: 458000.0, y: 339500.0 },
+                coord! { x: 458000.0, y: 340500.0 },
+                coord! { x: 457000.0, y: 340500.0 },
+                coord! { x: 457000.0, y: 339500.0 },
+            ]),
+            vec![],
+        );
+        let grid = HexGrid::from_bng_polygon(&polygon, 10);
+        assert!(!grid.is_empty());
+        assert_eq!(grid.zoom_level(), 10);
+    }
+
+    #[test]
+    fn test_from_bng_polygon_filters_cells() {
+        use geo_types::LineString;
+
+        let triangle = Polygon::new(
+            LineString::from(vec![
+                coord! { x: 457000.0, y: 339500.0 },
+                coord! { x: 458000.0, y: 339500.0 },
+                coord! { x: 457500.0, y: 340500.0 },
+                coord! { x: 457000.0, y: 339500.0 },
+            ]),
+            vec![],
+        );
+
+        let polygon_grid = HexGrid::from_bng_polygon(&triangle, 10);
+        let bbox_grid = HexGrid::from_bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0), 10);
+
+        assert!(polygon_grid.len() < bbox_grid.len());
+        assert!(!polygon_grid.is_empty());
+    }
+
+    #[test]
+    fn test_from_wgs84_polygon() -> Result<(), N3gbError> {
+        use geo_types::LineString;
+
+        let polygon = Polygon::new(
+            LineString::from(vec![
+                coord! { x: -2.3, y: 53.4 },
+                coord! { x: -2.2, y: 53.4 },
+                coord! { x: -2.2, y: 53.5 },
+                coord! { x: -2.3, y: 53.5 },
+                coord! { x: -2.3, y: 53.4 },
+            ]),
+            vec![],
+        );
+        let grid = HexGrid::from_wgs84_polygon(&polygon, 10)?;
+        assert!(!grid.is_empty());
+        assert_eq!(grid.zoom_level(), 10);
+        Ok(())
+    }
+
+    #[test]
+    fn test_builder_bng_polygon() {
+        use geo_types::LineString;
+
+        let polygon = Polygon::new(
+            LineString::from(vec![
+                coord! { x: 457000.0, y: 339500.0 },
+                coord! { x: 458000.0, y: 339500.0 },
+                coord! { x: 458000.0, y: 340500.0 },
+                coord! { x: 457000.0, y: 340500.0 },
+                coord! { x: 457000.0, y: 339500.0 },
+            ]),
+            vec![],
+        );
+        let grid = HexGrid::builder()
+            .zoom_level(10)
+            .bng_polygon(polygon)
+            .build();
+
+        assert!(!grid.is_empty());
+        assert_eq!(grid.zoom_level(), 10);
+    }
+
+    #[test]
+    fn test_builder_wgs84_polygon() -> Result<(), N3gbError> {
+        use geo_types::LineString;
+
+        let polygon = Polygon::new(
+            LineString::from(vec![
+                coord! { x: -2.3, y: 53.4 },
+                coord! { x: -2.2, y: 53.4 },
+                coord! { x: -2.2, y: 53.5 },
+                coord! { x: -2.3, y: 53.5 },
+                coord! { x: -2.3, y: 53.4 },
+            ]),
+            vec![],
+        );
+        let grid = HexGrid::builder()
+            .zoom_level(10)
+            .wgs84_polygon(polygon)?
+            .build();
+
+        assert!(!grid.is_empty());
+        assert_eq!(grid.zoom_level(), 10);
         Ok(())
     }
 }

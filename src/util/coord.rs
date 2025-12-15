@@ -1,5 +1,5 @@
 use crate::util::error::N3gbError;
-use geo_types::{Coord, LineString, Point};
+use geo_types::{Coord, LineString, Point, Polygon};
 use proj::Proj;
 use rayon::prelude::*;
 use std::cell::RefCell;
@@ -91,6 +91,13 @@ pub fn wgs84_line_to_bng(line: &LineString) -> Result<LineString, N3gbError> {
     Ok(LineString::new(coords?))
 }
 
+pub fn wgs84_polygon_to_bng(polygon: &Polygon<f64>) -> Result<Polygon<f64>, N3gbError> {
+    let exterior = wgs84_line_to_bng(polygon.exterior())?;
+    let interiors: Result<Vec<LineString>, N3gbError> =
+        polygon.interiors().iter().map(wgs84_line_to_bng).collect();
+    Ok(Polygon::new(exterior, interiors?))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -104,7 +111,6 @@ mod tests {
         Ok(())
     }
 
-    // Tests for Coordinate trait generics
     #[test]
     fn test_coordinate_trait_tuple() {
         let tuple = (100.0, 200.0);
