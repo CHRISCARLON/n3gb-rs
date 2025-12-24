@@ -17,7 +17,7 @@ Reconstructing from ID
 1. decode_hex_identifier — Decodes the Base64 string back into version, center_x, center_y, and zoom.
 2. create_hexagon — Draws 6 vertices around the center at the radius for that zoom level.
 
-How polygons maintain the offset structure?
+How hex cells  maintain the offset structure?
 
 1. They don't care nor need to know about it.
 2. The offset is applied when hex_to_point calculates the centre.

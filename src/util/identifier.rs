@@ -5,8 +5,36 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
 /// Generates a unique hex cell identifier from BNG coordinates and zoom level.
 ///
-/// The identifier is a URL-safe Base64 string containing the version, coordinates,
-/// zoom level, and a checksum.
+/// The identifier is a URL-safe Base64 string encoding a 19-byte binary structure.
+///
+/// # Binary Format
+///
+/// The identifier encodes the following data in big-endian byte order:
+///
+/// | Offset | Size | Field       | Description                                      |
+/// |--------|------|-------------|--------------------------------------------------|
+/// | 0      | 1    | Version     | Identifier format version (currently 1)          |
+/// | 1      | 8    | Easting     | BNG easting scaled by `SCALE_FACTOR` as `u64`    |
+/// | 9      | 8    | Northing    | BNG northing scaled by `SCALE_FACTOR` as `u64`   |
+/// | 17     | 1    | Zoom Level  | Grid zoom level (0-15)                           |
+/// | 18     | 1    | Checksum    | Wrapping sum of bytes 0-17 for validation        |
+///
+/// # Process
+///
+/// 1. Multiplies coordinates by `SCALE_FACTOR` and rounds to preserve precision
+/// 2. Packs version, scaled coordinates, and zoom level into 18 bytes
+/// 3. Computes a checksum by summing all bytes (with wrapping)
+/// 4. Appends the checksum byte
+/// 5. Encodes the 19 bytes as URL-safe Base64 (no padding)
+///
+/// # Example
+/// ```
+/// use n3gb_rs::util::identifier::generate_identifier;
+///
+/// let id = generate_identifier(457500.0, 340000.0, 10);
+/// assert!(!id.is_empty());
+/// println!("{}", id);
+/// ```
 pub fn generate_identifier(easting: f64, northing: f64, zoom_level: u8) -> String {
     let easting_int = (easting * SCALE_FACTOR as f64).round() as u64;
     let northing_int = (northing * SCALE_FACTOR as f64).round() as u64;
@@ -23,9 +51,44 @@ pub fn generate_identifier(easting: f64, northing: f64, zoom_level: u8) -> Strin
     URL_SAFE_NO_PAD.encode(&binary_data)
 }
 
-/// Decodes a hex cell identifier back to its components.
+/// Decodes a hex cell identifier back to its component parts.
 ///
-/// Returns `(version, easting, northing, zoom_level)`.
+/// Parses the URL-safe Base64 identifier and extracts the original BNG coordinates
+/// and zoom level.
+///
+/// # Process
+///
+/// 1. Decodes the Base64 string to 19 bytes
+/// 2. Validates the length is exactly 19 bytes
+/// 3. Extracts and verifies the checksum (last byte) against bytes 0-17
+/// 4. Extracts the version byte and validates it matches the current version
+/// 5. Reads the 8-byte easting and northing values (big-endian `u64`)
+/// 6. Divides by `SCALE_FACTOR` to restore the original `f64` coordinates
+/// 7. Extracts the zoom level byte
+///
+/// # Returns
+///
+/// A tuple of `(version, easting, northing, zoom_level)` on success.
+///
+/// # Example
+/// ```
+/// use n3gb_rs::util::identifier::{generate_identifier, decode_hex_identifier};
+///
+/// let id = generate_identifier(457500.0, 340000.0, 10);
+/// let (version, easting, northing, zoom) = decode_hex_identifier(&id).unwrap();
+///
+/// assert_eq!(version, 1);
+/// assert!((easting - 457500.0).abs() < 0.001);
+/// assert!((northing - 340000.0).abs() < 0.001);
+/// assert_eq!(zoom, 10);
+/// ```
+///
+/// # Errors
+///
+/// - [`N3gbError::Base64DecodeError`] - Invalid Base64 encoding
+/// - [`N3gbError::InvalidIdentifierLength`] - Decoded data is not 19 bytes
+/// - [`N3gbError::InvalidChecksum`] - Checksum validation failed
+/// - [`N3gbError::UnsupportedVersion`] - Version byte doesn't match current version
 pub fn decode_hex_identifier(identifier: &str) -> Result<(u8, f64, f64, u8), N3gbError> {
     let binary_data = URL_SAFE_NO_PAD
         .decode(identifier)
@@ -90,5 +153,15 @@ mod tests {
     fn test_invalid_identifier() {
         let result = decode_hex_identifier("invalid");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_identifier_output() {
+        let id = generate_identifier(457500.0, 340000.0, 10);
+        println!("Generated identifier: {}", id);
+        println!("Length: {} chars", id.len());
+
+        let (version, easting, northing, zoom) = decode_hex_identifier(&id).unwrap();
+        println!("Decoded: version={}, easting={}, northing={}, zoom={}", version, easting, northing, zoom);
     }
 }
