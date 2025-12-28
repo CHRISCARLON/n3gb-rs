@@ -1,5 +1,5 @@
 use crate::util::error::N3gbError;
-use geo_types::{Coord, LineString, Point, Polygon};
+use geo_types::{Coord, LineString, MultiPolygon, Point, Polygon};
 use proj::Proj;
 use rayon::prelude::*;
 use std::cell::RefCell;
@@ -96,6 +96,14 @@ pub fn wgs84_polygon_to_bng(polygon: &Polygon<f64>) -> Result<Polygon<f64>, N3gb
     let interiors: Result<Vec<LineString>, N3gbError> =
         polygon.interiors().iter().map(wgs84_line_to_bng).collect();
     Ok(Polygon::new(exterior, interiors?))
+}
+
+pub fn wgs84_multipolygon_to_bng(
+    multipolygon: &MultiPolygon<f64>,
+) -> Result<MultiPolygon<f64>, N3gbError> {
+    let polygons: Result<Vec<Polygon<f64>>, N3gbError> =
+        multipolygon.0.iter().map(wgs84_polygon_to_bng).collect();
+    Ok(MultiPolygon::new(polygons?))
 }
 
 #[cfg(test)]

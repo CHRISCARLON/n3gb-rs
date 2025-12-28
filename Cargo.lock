@@ -978,7 +978,7 @@ dependencies = [
 
 [[package]]
 name = "n3gb-rs"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "arrow-array",
  "arrow-schema",

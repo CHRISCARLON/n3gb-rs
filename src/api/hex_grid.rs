@@ -3,12 +3,14 @@ use crate::api::hex_cell::HexCell;
 use crate::api::hex_parquet::HexCellsToGeoParquet;
 use crate::core::constants::{GRID_EXTENTS, MAX_ZOOM_LEVEL};
 use crate::core::grid::{hex_to_point, point_to_hex};
-use crate::util::coord::{Coordinate, wgs84_polygon_to_bng, wgs84_to_bng};
+use crate::util::coord::{
+    wgs84_multipolygon_to_bng, wgs84_polygon_to_bng, wgs84_to_bng, Coordinate,
+};
 use crate::util::error::N3gbError;
 use crate::util::identifier::generate_identifier;
 use arrow_array::RecordBatch;
 use geo::{BoundingRect, Intersects};
-use geo_types::{Point, Polygon, Rect};
+use geo_types::{MultiPolygon, Point, Polygon, Rect};
 use geoarrow_array::array::{PointArray, PolygonArray};
 use rayon::prelude::*;
 use std::path::Path;
@@ -203,6 +205,101 @@ impl HexGrid {
         Ok(Self::from_bng_polygon(&bng_polygon, zoom_level))
     }
 
+    /// Creates a HexGrid from a multipolygon in BNG coordinates.
+    ///
+    /// Generates hex cells for each polygon in the multipolygon and
+    /// combines them, deduplicating overlapping cells.
+    ///
+    /// # Example
+    /// ```
+    /// use n3gb_rs::HexGrid;
+    /// use geo_types::{MultiPolygon, Polygon, LineString, coord};
+    ///
+    /// let poly1 = Polygon::new(
+    ///     LineString::from(vec![
+    ///         coord! { x: 457000.0, y: 339500.0 },
+    ///         coord! { x: 457500.0, y: 339500.0 },
+    ///         coord! { x: 457500.0, y: 340000.0 },
+    ///         coord! { x: 457000.0, y: 340000.0 },
+    ///         coord! { x: 457000.0, y: 339500.0 },
+    ///     ]),
+    ///     vec![],
+    /// );
+    /// let poly2 = Polygon::new(
+    ///     LineString::from(vec![
+    ///         coord! { x: 457500.0, y: 340000.0 },
+    ///         coord! { x: 458000.0, y: 340000.0 },
+    ///         coord! { x: 458000.0, y: 340500.0 },
+    ///         coord! { x: 457500.0, y: 340500.0 },
+    ///         coord! { x: 457500.0, y: 340000.0 },
+    ///     ]),
+    ///     vec![],
+    /// );
+    /// let mp = MultiPolygon::new(vec![poly1, poly2]);
+    /// let grid = HexGrid::from_bng_multipolygon(&mp, 10);
+    /// assert!(!grid.is_empty());
+    /// ```
+    pub fn from_bng_multipolygon(multipolygon: &MultiPolygon<f64>, zoom_level: u8) -> Self {
+        use std::collections::HashSet;
+
+        let mut seen_ids = HashSet::new();
+        let cells: Vec<HexCell> = multipolygon
+            .0
+            .par_iter()
+            .flat_map(|polygon| Self::from_bng_polygon(polygon, zoom_level).cells)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .filter(|cell| seen_ids.insert(cell.id.clone()))
+            .collect();
+
+        Self { cells, zoom_level }
+    }
+
+    /// Creates a HexGrid from a multipolygon in WGS84 (lon/lat) coordinates.
+    ///
+    /// Projects the multipolygon to BNG, then generates hex cells for each
+    /// polygon and combines them, deduplicating overlapping cells.
+    ///
+    /// # Example
+    /// ```
+    /// use n3gb_rs::HexGrid;
+    /// use geo_types::{MultiPolygon, Polygon, LineString, coord};
+    ///
+    /// # fn main() -> Result<(), n3gb_rs::N3gbError> {
+    /// let poly1 = Polygon::new(
+    ///     LineString::from(vec![
+    ///         coord! { x: -2.3, y: 53.4 },
+    ///         coord! { x: -2.25, y: 53.4 },
+    ///         coord! { x: -2.25, y: 53.45 },
+    ///         coord! { x: -2.3, y: 53.45 },
+    ///         coord! { x: -2.3, y: 53.4 },
+    ///     ]),
+    ///     vec![],
+    /// );
+    /// let poly2 = Polygon::new(
+    ///     LineString::from(vec![
+    ///         coord! { x: -2.25, y: 53.45 },
+    ///         coord! { x: -2.2, y: 53.45 },
+    ///         coord! { x: -2.2, y: 53.5 },
+    ///         coord! { x: -2.25, y: 53.5 },
+    ///         coord! { x: -2.25, y: 53.45 },
+    ///     ]),
+    ///     vec![],
+    /// );
+    /// let mp = MultiPolygon::new(vec![poly1, poly2]);
+    /// let grid = HexGrid::from_wgs84_multipolygon(&mp, 10)?;
+    /// assert!(!grid.is_empty());
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn from_wgs84_multipolygon(
+        multipolygon: &MultiPolygon<f64>,
+        zoom_level: u8,
+    ) -> Result<Self, N3gbError> {
+        let bng_multipolygon = wgs84_multipolygon_to_bng(multipolygon)?;
+        Ok(Self::from_bng_multipolygon(&bng_multipolygon, zoom_level))
+    }
+
     /// Returns the zoom level of this grid.
     pub fn zoom_level(&self) -> u8 {
         self.zoom_level
@@ -295,6 +392,7 @@ pub struct HexGridBuilder {
     max_x: Option<f64>,
     max_y: Option<f64>,
     polygon: Option<Polygon<f64>>,
+    multipolygon: Option<MultiPolygon<f64>>,
 }
 
 impl HexGridBuilder {
@@ -429,24 +527,115 @@ impl HexGridBuilder {
         Ok(self)
     }
 
+    /// Sets the geometry from a multipolygon in BNG coordinates.
+    ///
+    /// When a multipolygon is set, the grid will only include cells that
+    /// intersect any of the polygons, with duplicates removed.
+    ///
+    /// # Example
+    /// ```
+    /// use n3gb_rs::HexGrid;
+    /// use geo_types::{MultiPolygon, Polygon, LineString, coord};
+    ///
+    /// let poly1 = Polygon::new(
+    ///     LineString::from(vec![
+    ///         coord! { x: 457000.0, y: 339500.0 },
+    ///         coord! { x: 457500.0, y: 339500.0 },
+    ///         coord! { x: 457500.0, y: 340000.0 },
+    ///         coord! { x: 457000.0, y: 340000.0 },
+    ///         coord! { x: 457000.0, y: 339500.0 },
+    ///     ]),
+    ///     vec![],
+    /// );
+    /// let poly2 = Polygon::new(
+    ///     LineString::from(vec![
+    ///         coord! { x: 457500.0, y: 340000.0 },
+    ///         coord! { x: 458000.0, y: 340000.0 },
+    ///         coord! { x: 458000.0, y: 340500.0 },
+    ///         coord! { x: 457500.0, y: 340500.0 },
+    ///         coord! { x: 457500.0, y: 340000.0 },
+    ///     ]),
+    ///     vec![],
+    /// );
+    /// let mp = MultiPolygon::new(vec![poly1, poly2]);
+    /// let grid = HexGrid::builder()
+    ///     .zoom_level(10)
+    ///     .bng_multipolygon(mp)
+    ///     .build();
+    /// ```
+    pub fn bng_multipolygon(mut self, multipolygon: MultiPolygon<f64>) -> Self {
+        self.multipolygon = Some(multipolygon);
+        self
+    }
+
+    /// Sets the geometry from a multipolygon in WGS84 (lon/lat) coordinates.
+    ///
+    /// Projects the multipolygon to BNG, then filters cells to those
+    /// that intersect any of the polygons.
+    ///
+    /// # Example
+    /// ```
+    /// use n3gb_rs::HexGrid;
+    /// use geo_types::{MultiPolygon, Polygon, LineString, coord};
+    ///
+    /// # fn main() -> Result<(), n3gb_rs::N3gbError> {
+    /// let poly1 = Polygon::new(
+    ///     LineString::from(vec![
+    ///         coord! { x: -2.3, y: 53.4 },
+    ///         coord! { x: -2.25, y: 53.4 },
+    ///         coord! { x: -2.25, y: 53.45 },
+    ///         coord! { x: -2.3, y: 53.45 },
+    ///         coord! { x: -2.3, y: 53.4 },
+    ///     ]),
+    ///     vec![],
+    /// );
+    /// let poly2 = Polygon::new(
+    ///     LineString::from(vec![
+    ///         coord! { x: -2.25, y: 53.45 },
+    ///         coord! { x: -2.2, y: 53.45 },
+    ///         coord! { x: -2.2, y: 53.5 },
+    ///         coord! { x: -2.25, y: 53.5 },
+    ///         coord! { x: -2.25, y: 53.45 },
+    ///     ]),
+    ///     vec![],
+    /// );
+    /// let mp = MultiPolygon::new(vec![poly1, poly2]);
+    /// let grid = HexGrid::builder()
+    ///     .zoom_level(10)
+    ///     .wgs84_multipolygon(mp)?
+    ///     .build();
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn wgs84_multipolygon(
+        mut self,
+        multipolygon: MultiPolygon<f64>,
+    ) -> Result<Self, N3gbError> {
+        let bng_multipolygon = wgs84_multipolygon_to_bng(&multipolygon)?;
+        self.multipolygon = Some(bng_multipolygon);
+        Ok(self)
+    }
+
     /// Builds the [`HexGrid`].
     ///
     /// # Panics
     ///
-    /// Panics if `zoom_level` has not been set, or if neither extent nor polygon has been set.
+    /// Panics if `zoom_level` has not been set, or if neither extent, polygon,
+    /// nor multipolygon has been set.
     pub fn build(self) -> HexGrid {
         let zoom_level = self.zoom_level.expect("zoom_level must be set");
 
-        if let Some(polygon) = self.polygon {
-            return HexGrid::from_bng_polygon(&polygon, zoom_level);
+        match (self.multipolygon, self.polygon) {
+            (Some(mp), _) => HexGrid::from_bng_multipolygon(&mp, zoom_level),
+            (_, Some(p)) => HexGrid::from_bng_polygon(&p, zoom_level),
+            (None, None) => {
+                let min_x = self.min_x.expect("extent, polygon, or multipolygon must be set");
+                let min_y = self.min_y.expect("extent, polygon, or multipolygon must be set");
+                let max_x = self.max_x.expect("extent, polygon, or multipolygon must be set");
+                let max_y = self.max_y.expect("extent, polygon, or multipolygon must be set");
+                HexGrid::from_extent(min_x, min_y, max_x, max_y, zoom_level)
+            }
         }
-
-        let min_x = self.min_x.expect("extent or polygon must be set");
-        let min_y = self.min_y.expect("extent or polygon must be set");
-        let max_x = self.max_x.expect("extent or polygon must be set");
-        let max_y = self.max_y.expect("extent or polygon must be set");
-
-        HexGrid::from_extent(min_x, min_y, max_x, max_y, zoom_level)
     }
 }
 
@@ -746,6 +935,163 @@ mod tests {
         let grid = HexGrid::builder()
             .zoom_level(10)
             .wgs84_polygon(polygon)?
+            .build();
+
+        assert!(!grid.is_empty());
+        assert_eq!(grid.zoom_level(), 10);
+        Ok(())
+    }
+
+    #[test]
+    fn test_from_bng_multipolygon() {
+        use geo_types::LineString;
+
+        let poly1 = Polygon::new(
+            LineString::from(vec![
+                coord! { x: 457000.0, y: 339500.0 },
+                coord! { x: 457500.0, y: 339500.0 },
+                coord! { x: 457500.0, y: 340000.0 },
+                coord! { x: 457000.0, y: 340000.0 },
+                coord! { x: 457000.0, y: 339500.0 },
+            ]),
+            vec![],
+        );
+        let poly2 = Polygon::new(
+            LineString::from(vec![
+                coord! { x: 457500.0, y: 340000.0 },
+                coord! { x: 458000.0, y: 340000.0 },
+                coord! { x: 458000.0, y: 340500.0 },
+                coord! { x: 457500.0, y: 340500.0 },
+                coord! { x: 457500.0, y: 340000.0 },
+            ]),
+            vec![],
+        );
+        let mp = MultiPolygon::new(vec![poly1, poly2]);
+        let grid = HexGrid::from_bng_multipolygon(&mp, 10);
+
+        assert!(!grid.is_empty());
+        assert_eq!(grid.zoom_level(), 10);
+    }
+
+    #[test]
+    fn test_from_bng_multipolygon_deduplicates() {
+        use geo_types::LineString;
+
+        // Two overlapping polygons
+        let poly1 = Polygon::new(
+            LineString::from(vec![
+                coord! { x: 457000.0, y: 339500.0 },
+                coord! { x: 458000.0, y: 339500.0 },
+                coord! { x: 458000.0, y: 340500.0 },
+                coord! { x: 457000.0, y: 340500.0 },
+                coord! { x: 457000.0, y: 339500.0 },
+            ]),
+            vec![],
+        );
+        let poly2 = poly1.clone();
+        let mp = MultiPolygon::new(vec![poly1.clone(), poly2]);
+
+        let mp_grid = HexGrid::from_bng_multipolygon(&mp, 10);
+        let single_grid = HexGrid::from_bng_polygon(&poly1, 10);
+
+        // Should have same number of cells due to deduplication
+        assert_eq!(mp_grid.len(), single_grid.len());
+    }
+
+    #[test]
+    fn test_from_wgs84_multipolygon() -> Result<(), N3gbError> {
+        use geo_types::LineString;
+
+        let poly1 = Polygon::new(
+            LineString::from(vec![
+                coord! { x: -2.3, y: 53.4 },
+                coord! { x: -2.25, y: 53.4 },
+                coord! { x: -2.25, y: 53.45 },
+                coord! { x: -2.3, y: 53.45 },
+                coord! { x: -2.3, y: 53.4 },
+            ]),
+            vec![],
+        );
+        let poly2 = Polygon::new(
+            LineString::from(vec![
+                coord! { x: -2.25, y: 53.45 },
+                coord! { x: -2.2, y: 53.45 },
+                coord! { x: -2.2, y: 53.5 },
+                coord! { x: -2.25, y: 53.5 },
+                coord! { x: -2.25, y: 53.45 },
+            ]),
+            vec![],
+        );
+        let mp = MultiPolygon::new(vec![poly1, poly2]);
+        let grid = HexGrid::from_wgs84_multipolygon(&mp, 10)?;
+
+        assert!(!grid.is_empty());
+        assert_eq!(grid.zoom_level(), 10);
+        Ok(())
+    }
+
+    #[test]
+    fn test_builder_bng_multipolygon() {
+        use geo_types::LineString;
+
+        let poly1 = Polygon::new(
+            LineString::from(vec![
+                coord! { x: 457000.0, y: 339500.0 },
+                coord! { x: 457500.0, y: 339500.0 },
+                coord! { x: 457500.0, y: 340000.0 },
+                coord! { x: 457000.0, y: 340000.0 },
+                coord! { x: 457000.0, y: 339500.0 },
+            ]),
+            vec![],
+        );
+        let poly2 = Polygon::new(
+            LineString::from(vec![
+                coord! { x: 457500.0, y: 340000.0 },
+                coord! { x: 458000.0, y: 340000.0 },
+                coord! { x: 458000.0, y: 340500.0 },
+                coord! { x: 457500.0, y: 340500.0 },
+                coord! { x: 457500.0, y: 340000.0 },
+            ]),
+            vec![],
+        );
+        let mp = MultiPolygon::new(vec![poly1, poly2]);
+        let grid = HexGrid::builder()
+            .zoom_level(10)
+            .bng_multipolygon(mp)
+            .build();
+
+        assert!(!grid.is_empty());
+        assert_eq!(grid.zoom_level(), 10);
+    }
+
+    #[test]
+    fn test_builder_wgs84_multipolygon() -> Result<(), N3gbError> {
+        use geo_types::LineString;
+
+        let poly1 = Polygon::new(
+            LineString::from(vec![
+                coord! { x: -2.3, y: 53.4 },
+                coord! { x: -2.25, y: 53.4 },
+                coord! { x: -2.25, y: 53.45 },
+                coord! { x: -2.3, y: 53.45 },
+                coord! { x: -2.3, y: 53.4 },
+            ]),
+            vec![],
+        );
+        let poly2 = Polygon::new(
+            LineString::from(vec![
+                coord! { x: -2.25, y: 53.45 },
+                coord! { x: -2.2, y: 53.45 },
+                coord! { x: -2.2, y: 53.5 },
+                coord! { x: -2.25, y: 53.5 },
+                coord! { x: -2.25, y: 53.45 },
+            ]),
+            vec![],
+        );
+        let mp = MultiPolygon::new(vec![poly1, poly2]);
+        let grid = HexGrid::builder()
+            .zoom_level(10)
+            .wgs84_multipolygon(mp)?
             .build();
 
         assert!(!grid.is_empty());
