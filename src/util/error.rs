@@ -17,6 +17,10 @@ pub enum N3gbError {
     ProjectionError(String),
     /// File I/O or serialization error.
     IoError(String),
+    /// CSV parsing or reading error.
+    CsvError(String),
+    /// Failed to parse geometry from string (GeoJSON or WKT).
+    GeometryParseError(String),
 }
 
 impl std::fmt::Display for N3gbError {
@@ -30,6 +34,8 @@ impl std::fmt::Display for N3gbError {
             N3gbError::Base64DecodeError => write!(f, "Base64 decode error"),
             N3gbError::ProjectionError(msg) => write!(f, "Projection error: {}", msg),
             N3gbError::IoError(msg) => write!(f, "IO error: {}", msg),
+            N3gbError::CsvError(msg) => write!(f, "CSV error: {}", msg),
+            N3gbError::GeometryParseError(msg) => write!(f, "Geometry parse error: {}", msg),
         }
     }
 }

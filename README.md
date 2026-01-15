@@ -17,13 +17,7 @@ Reconstructing from ID
 1. decode_hex_identifier — Decodes the Base64 string back into version, center_x, center_y, and zoom.
 2. create_hexagon — Draws 6 vertices around the center at the radius for that zoom level.
 
-How hex cells  maintain the offset structure?
-
-1. They don't care nor need to know about it.
-2. The offset is applied when hex_to_point calculates the centre.
-3. The centre coordinates themselves contain the offset.
-
-## Lib currently has two main entry points
+## Lib currently has three main entry points
 
 **1. Single Cells** - use `HexCell`
 
@@ -55,3 +49,30 @@ if let Some(cell) = grid.get_cell_at(&point) {
     println!("{}", cell.id);
 }
 ```
+
+**3. CSV to Hex Conversion** - use `CsvToHex` trait or `csv_to_hex_csv` function
+
+Convert CSV files containing geometry (WKT or GeoJSON) to hex-indexed CSVs:
+
+```rust
+use n3gb_rs::{CsvToHex, CsvHexConfig, Crs, GeometryFormat};
+
+let config = CsvHexConfig::new("geometry", 12)
+    .exclude(vec!["Geo Point".into()])
+    .crs(Crs::Wgs84)
+    .with_hex_geometry(GeometryFormat::Wkt);
+
+// Using trait method
+"input.csv".to_hex_csv("output.csv", &config)?;
+
+// Or using function
+csv_to_hex_csv("input.csv", "output.csv", &config)?;
+```
+
+Supported geometry types:
+- Point, MultiPoint
+- LineString, MultiLineString
+- Polygon, MultiPolygon
+- GeometryCollection
+
+Input formats: WKT (`POINT(...)`) or GeoJSON (`{"type":"Point",...}`)

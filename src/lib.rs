@@ -1,6 +1,6 @@
 //! # n3gb-rs
 //!
-//! There are currently two main entry points that people might use.
+//! There are currently three main entry points.
 //!
 //! ### 1. `HexCell` - Single Cell Operations
 //!
@@ -32,13 +32,30 @@
 //! }
 //! ```
 //!
+//! ### 3. `CsvToHex` - CSV File Conversion
+//!
+//! Convert CSV files with geometry columns (WKT or GeoJSON) to hex-indexed CSVs:
+//!
+//! ```no_run
+//! use n3gb_rs::{CsvToHex, CsvHexConfig, Crs, GeometryFormat};
+//!
+//! let config = CsvHexConfig::new("geometry", 12)
+//!     .exclude(vec!["Geo Point".into()])
+//!     .crs(Crs::Wgs84)
+//!     .with_hex_geometry(GeometryFormat::Wkt);
+//!
+//! // Using trait method
+//! "input.csv".to_hex_csv("output.csv", &config).unwrap();
+//! ```
+//!
 
 pub mod api;
 pub mod core;
 pub mod util;
 
 pub use api::{
-    HexCell, HexCellsToArrow, HexCellsToGeoParquet, HexGrid, HexGridBuilder, write_geoparquet,
+    Crs, CsvHexConfig, CsvToHex, GeometryFormat, HexCell, HexCellsToArrow, HexCellsToGeoParquet,
+    HexGrid, HexGridBuilder, csv_to_hex_csv, write_geoparquet,
 };
 pub use core::{
     CELL_RADIUS, CELL_WIDTHS, GRID_EXTENTS, HexagonDims, IDENTIFIER_VERSION, MAX_ZOOM_LEVEL,
