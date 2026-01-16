@@ -60,7 +60,7 @@ pub use api::{
 pub use core::{
     CELL_RADIUS, CELL_WIDTHS, GRID_EXTENTS, HexagonDims, IDENTIFIER_VERSION, MAX_ZOOM_LEVEL,
     bounding_box, create_hexagon, from_across_corners, from_across_flats, from_apothem, from_area,
-    from_circumradius, from_side, hex_to_point, point_to_hex,
+    from_circumradius, from_side, point_to_row_col, row_col_to_center,
 };
 pub use util::{Coordinate, N3gbError, decode_hex_identifier, generate_identifier, wgs84_to_bng};
 
@@ -102,7 +102,7 @@ mod tests {
     #[test]
     fn test_using_geo_types_macros() -> Result<(), N3gbError> {
         let pt = point! { x: 457996.0, y: 339874.0 };
-        let (row, col) = point_to_hex(&pt, 10)?;
+        let (row, col) = point_to_row_col(&pt, 10)?;
         assert!(row > 0);
         assert!(col > 0);
 

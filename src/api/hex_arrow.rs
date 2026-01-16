@@ -37,8 +37,6 @@ impl HexCellsToArrow for [HexCell] {
         builder.finish()
     }
 
-    // TODO: Need to think about a way to avoid adding everying to an intermediary Vec
-    // Not sure yet what I could do
     fn to_arrow_polygons(&self) -> PolygonArray {
         let poly = PolygonType::new(Dimension::XY, bng_metadata());
         let polygons: Vec<_> = self.par_iter().map(|c: &HexCell| c.to_polygon()).collect();

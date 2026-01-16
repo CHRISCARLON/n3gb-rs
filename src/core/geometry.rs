@@ -1,6 +1,9 @@
 use crate::util::coord::Coordinate;
 use geo_types::{Coord, LineString, Polygon};
 
+// This is where we create the polygon geometry from the centre point created during row_col_to_center
+// TODO: Name this something better
+
 /// Creates a hexagonal polygon centered at the given point.
 ///
 /// Returns a pointy-top hexagon (vertices at top and bottom) with the specified

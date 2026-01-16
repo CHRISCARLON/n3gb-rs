@@ -8,8 +8,8 @@ Inspired by the work done by [GDS NUAR n3gb](https://github.com/national-undergr
 
 Creating a HexCell
 
-1. point_to_hex — Takes your input coordinates and finds which grid cell they fall into. Returns (row, col).
-2. hex_to_point — Takes the (row, col) and calculates the exact center of that cell. This is where the offset for odd rows gets applied. Returns (center_x, center_y).
+1. point_to_row_col — Takes your input coordinates and finds which grid cell they fall into. Returns (row, col).
+2. row_col_to_center — Takes the (row, col) and calculates the exact center of that cell. This is where the offset for odd rows gets applied. Returns (center_x, center_y).
 3. generate_identifier — Takes the center coordinates of the HexCell and zoom level, packs it all into binary, and then encodes as Base64. The ID contains: version + center_x + center_y + zoom.
 
 Reconstructing from ID

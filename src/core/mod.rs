@@ -9,4 +9,4 @@ pub use dimensions::{
     from_circumradius, from_side,
 };
 pub use geometry::create_hexagon;
-pub use grid::{hex_to_point, point_to_hex};
+pub use grid::{point_to_row_col, row_col_to_center};

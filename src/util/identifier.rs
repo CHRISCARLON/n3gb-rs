@@ -3,6 +3,8 @@ use crate::util::error::N3gbError;
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
+// This is where we generate the actual identifiers or decode back into version, easting, northing, zoom
+
 /// Generates a unique hex cell identifier from BNG coordinates and zoom level.
 ///
 /// The identifier is a URL-safe Base64 string encoding a 19-byte binary structure.
@@ -162,6 +164,9 @@ mod tests {
         println!("Length: {} chars", id.len());
 
         let (version, easting, northing, zoom) = decode_hex_identifier(&id).unwrap();
-        println!("Decoded: version={}, easting={}, northing={}, zoom={}", version, easting, northing, zoom);
+        println!(
+            "Decoded: version={}, easting={}, northing={}, zoom={}",
+            version, easting, northing, zoom
+        );
     }
 }

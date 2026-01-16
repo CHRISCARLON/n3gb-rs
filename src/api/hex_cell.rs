@@ -2,7 +2,7 @@ use crate::api::hex_arrow::HexCellsToArrow;
 use crate::api::hex_parquet::HexCellsToGeoParquet;
 use crate::core::constants::CELL_RADIUS;
 use crate::core::geometry::create_hexagon;
-use crate::core::grid::{hex_to_point, point_to_hex};
+use crate::core::grid::{point_to_row_col, row_col_to_center};
 use crate::util::coord::{Coordinate, wgs84_line_to_bng, wgs84_to_bng};
 use crate::util::error::N3gbError;
 use crate::util::identifier::{decode_hex_identifier, generate_identifier};
@@ -47,7 +47,6 @@ pub struct HexCell {
     pub col: i64,
 }
 
-// TODO: Maybe I could merge all the diff ways to create a HexCell into a
 impl HexCell {
     pub(crate) fn new(id: String, center: Point<f64>, zoom_level: u8, row: i64, col: i64) -> Self {
         Self {
@@ -74,7 +73,7 @@ impl HexCell {
     /// ```
     pub fn from_hex_id(id: &str) -> Result<Self, N3gbError> {
         let (_, easting, northing, zoom) = decode_hex_identifier(id)?;
-        let (row, col) = point_to_hex(&(easting, northing), zoom)?;
+        let (row, col) = point_to_row_col(&(easting, northing), zoom)?;
 
         Ok(Self {
             id: id.to_string(),
@@ -124,10 +123,10 @@ impl HexCell {
                 let x = start.x + t * dx;
                 let y = start.y + t * dy;
 
-                let (row, col) = point_to_hex(&(x, y), zoom)?;
+                let (row, col) = point_to_row_col(&(x, y), zoom)?;
 
                 if seen.insert((row, col)) {
-                    let center = hex_to_point(row, col, zoom)?;
+                    let center = row_col_to_center(row, col, zoom)?;
                     let id = generate_identifier(center.x(), center.y(), zoom);
                     cells.push(HexCell::new(id, center, zoom, row, col));
                 }
@@ -162,8 +161,8 @@ impl HexCell {
     /// # }
     /// ```
     pub fn from_bng(coord: &impl Coordinate, zoom: u8) -> Result<Self, N3gbError> {
-        let (row, col) = point_to_hex(coord, zoom)?;
-        let center = hex_to_point(row, col, zoom)?;
+        let (row, col) = point_to_row_col(coord, zoom)?;
+        let center = row_col_to_center(row, col, zoom)?;
         let id = generate_identifier(center.x(), center.y(), zoom);
 
         Ok(Self {

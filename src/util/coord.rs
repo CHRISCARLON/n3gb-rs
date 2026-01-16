@@ -4,6 +4,8 @@ use proj::Proj;
 use rayon::prelude::*;
 use std::cell::RefCell;
 
+// This is where we transform Wsg84 coords into BNG coords
+
 /// Trait for types that can provide x/y coordinates.
 ///
 /// Implemented for `(f64, f64)` tuples and `geo_types::Point<f64>`.

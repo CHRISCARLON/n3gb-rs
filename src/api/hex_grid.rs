@@ -2,9 +2,9 @@ use crate::api::hex_arrow::HexCellsToArrow;
 use crate::api::hex_cell::HexCell;
 use crate::api::hex_parquet::HexCellsToGeoParquet;
 use crate::core::constants::{GRID_EXTENTS, MAX_ZOOM_LEVEL};
-use crate::core::grid::{hex_to_point, point_to_hex};
+use crate::core::grid::{point_to_row_col, row_col_to_center};
 use crate::util::coord::{
-    wgs84_multipolygon_to_bng, wgs84_polygon_to_bng, wgs84_to_bng, Coordinate,
+    Coordinate, wgs84_multipolygon_to_bng, wgs84_polygon_to_bng, wgs84_to_bng,
 };
 use crate::util::error::N3gbError;
 use crate::util::identifier::generate_identifier;
@@ -329,7 +329,7 @@ impl HexGrid {
     ///
     /// Returns `None` if the point is outside the grid's extent.
     pub fn get_cell_at(&self, point: &Point<f64>) -> Option<&HexCell> {
-        let (row, col) = point_to_hex(point, self.zoom_level).ok()?;
+        let (row, col) = point_to_row_col(point, self.zoom_level).ok()?;
         self.cells
             .iter()
             .find(|cell| cell.row == row && cell.col == col)
@@ -629,10 +629,18 @@ impl HexGridBuilder {
             (Some(mp), _) => HexGrid::from_bng_multipolygon(&mp, zoom_level),
             (_, Some(p)) => HexGrid::from_bng_polygon(&p, zoom_level),
             (None, None) => {
-                let min_x = self.min_x.expect("extent, polygon, or multipolygon must be set");
-                let min_y = self.min_y.expect("extent, polygon, or multipolygon must be set");
-                let max_x = self.max_x.expect("extent, polygon, or multipolygon must be set");
-                let max_y = self.max_y.expect("extent, polygon, or multipolygon must be set");
+                let min_x = self
+                    .min_x
+                    .expect("extent, polygon, or multipolygon must be set");
+                let min_y = self
+                    .min_y
+                    .expect("extent, polygon, or multipolygon must be set");
+                let max_x = self
+                    .max_x
+                    .expect("extent, polygon, or multipolygon must be set");
+                let max_y = self
+                    .max_y
+                    .expect("extent, polygon, or multipolygon must be set");
                 HexGrid::from_extent(min_x, min_y, max_x, max_y, zoom_level)
             }
         }
@@ -650,19 +658,19 @@ fn generate_cells_for_extent(
         return Vec::new();
     }
 
-    let (ll_row, ll_col) = match point_to_hex(&(min_x, min_y), zoom_level) {
+    let (ll_row, ll_col) = match point_to_row_col(&(min_x, min_y), zoom_level) {
         Ok(v) => v,
         Err(_) => return Vec::new(),
     };
-    let (lr_row, lr_col) = match point_to_hex(&(max_x, min_y), zoom_level) {
+    let (lr_row, lr_col) = match point_to_row_col(&(max_x, min_y), zoom_level) {
         Ok(v) => v,
         Err(_) => return Vec::new(),
     };
-    let (ur_row, ur_col) = match point_to_hex(&(max_x, max_y), zoom_level) {
+    let (ur_row, ur_col) = match point_to_row_col(&(max_x, max_y), zoom_level) {
         Ok(v) => v,
         Err(_) => return Vec::new(),
     };
-    let (ul_row, ul_col) = match point_to_hex(&(min_x, max_y), zoom_level) {
+    let (ul_row, ul_col) = match point_to_row_col(&(min_x, max_y), zoom_level) {
         Ok(v) => v,
         Err(_) => return Vec::new(),
     };
@@ -677,7 +685,7 @@ fn generate_cells_for_extent(
         .collect::<Vec<_>>()
         .into_par_iter()
         .filter_map(|(row, col)| {
-            let center = hex_to_point(row, col, zoom_level).ok()?;
+            let center = row_col_to_center(row, col, zoom_level).ok()?;
 
             if center.x() < GRID_EXTENTS[0] || center.y() < GRID_EXTENTS[1] {
                 return None;

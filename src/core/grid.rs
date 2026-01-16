@@ -6,7 +6,7 @@ use geo_types::Point;
 /// Converts a BNG coordinate to hex grid row/column indices.
 ///
 /// Returns `(row, col)` for the cell containing the given point at the specified zoom level.
-pub fn point_to_hex<C: Coordinate>(coord: &C, z: u8) -> Result<(i64, i64), N3gbError> {
+pub fn point_to_row_col<C: Coordinate>(coord: &C, z: u8) -> Result<(i64, i64), N3gbError> {
     if z > MAX_ZOOM_LEVEL {
         return Err(N3gbError::InvalidZoomLevel(z));
     }
@@ -28,7 +28,7 @@ pub fn point_to_hex<C: Coordinate>(coord: &C, z: u8) -> Result<(i64, i64), N3gbE
 /// Converts hex grid row/column indices to a BNG center point.
 ///
 /// Returns the center point of the cell at the given row, column, and zoom level.
-pub fn hex_to_point(row: i64, col: i64, z: u8) -> Result<Point<f64>, N3gbError> {
+pub fn row_col_to_center(row: i64, col: i64, z: u8) -> Result<Point<f64>, N3gbError> {
     if z > MAX_ZOOM_LEVEL {
         return Err(N3gbError::InvalidZoomLevel(z));
     }
@@ -50,13 +50,13 @@ mod tests {
     use geo_types::point;
 
     #[test]
-    fn test_point_to_hex_and_back() -> Result<(), N3gbError> {
+    fn test_point_to_row_col_and_back() -> Result<(), N3gbError> {
         let easting = 457996.0;
         let northing = 339874.0;
         let zoom = 10;
 
-        let (row, col) = point_to_hex(&(easting, northing), zoom)?;
-        let point = hex_to_point(row, col, zoom)?;
+        let (row, col) = point_to_row_col(&(easting, northing), zoom)?;
+        let point = row_col_to_center(row, col, zoom)?;
 
         assert!((point.x() - 457925.0).abs() < 100.0);
         assert!((point.y() - 339888.99).abs() < 100.0);
@@ -64,12 +64,12 @@ mod tests {
     }
 
     #[test]
-    fn test_point_to_hex_with_point() -> Result<(), N3gbError> {
+    fn test_point_to_row_col_with_point() -> Result<(), N3gbError> {
         let pt = point! { x: 457996.0, y: 339874.0 };
         let zoom = 10;
 
-        let (row, col) = point_to_hex(&pt, zoom)?;
-        let center = hex_to_point(row, col, zoom)?;
+        let (row, col) = point_to_row_col(&pt, zoom)?;
+        let center = row_col_to_center(row, col, zoom)?;
 
         assert!((center.x() - 457925.0).abs() < 100.0);
         assert!((center.y() - 339888.99).abs() < 100.0);
@@ -78,13 +78,13 @@ mod tests {
 
     #[test]
     fn test_invalid_zoom_level() {
-        let result = point_to_hex(&(457996.0, 339874.0), 20);
+        let result = point_to_row_col(&(457996.0, 339874.0), 20);
         assert!(matches!(result, Err(N3gbError::InvalidZoomLevel(20))));
     }
 
     #[test]
-    fn test_hex_to_point_invalid_zoom() {
-        let result = hex_to_point(100, 100, 16);
+    fn test_row_col_to_center_invalid_zoom() {
+        let result = row_col_to_center(100, 100, 16);
         assert!(result.is_err());
     }
 }
