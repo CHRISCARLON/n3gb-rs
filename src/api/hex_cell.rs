@@ -84,7 +84,7 @@ impl HexCell {
         })
     }
 
-    /// Create HexCells along a LineString in BNG coordinates.
+    /// Create HexCells from  a LineString in BNG coordinates.
     ///
     /// Samples points along the line and returns all unique cells that intersect it.
     pub fn from_line_string_bng(line: &LineString, zoom: u8) -> Result<Vec<Self>, N3gbError> {
@@ -100,6 +100,7 @@ impl HexCell {
                 (dx * dx + dy * dy).sqrt()
             })
             .sum();
+
         let estimated_cells = ((total_length / cell_radius) * 1.5) as usize + line.0.len();
 
         let mut seen: HashSet<(i64, i64)> = HashSet::with_capacity(estimated_cells);

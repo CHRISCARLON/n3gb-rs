@@ -48,14 +48,25 @@
 //! "input.csv".to_hex_csv("output.csv", &config).unwrap();
 //! ```
 //!
+//! Or use separate coordinate columns (e.g., Easting/Northing or Lon/Lat):
+//!
+//! ```no_run
+//! use n3gb_rs::{CsvHexConfig, Crs, csv_to_hex_csv};
+//!
+//! let config = CsvHexConfig::from_coords("Easting", "Northing", 12)
+//!     .crs(Crs::Bng);
+//!
+//! csv_to_hex_csv("bus_stops.csv", "output.csv", &config).unwrap();
+//! ```
+//!
 
 pub mod api;
 pub mod core;
 pub mod util;
 
 pub use api::{
-    Crs, CsvHexConfig, CsvToHex, GeometryFormat, HexCell, HexCellsToArrow, HexCellsToGeoParquet,
-    HexGrid, HexGridBuilder, csv_to_hex_csv, write_geoparquet,
+    CoordinateSource, Crs, CsvHexConfig, CsvToHex, GeometryFormat, HexCell, HexCellsToArrow,
+    HexCellsToGeoParquet, HexGrid, HexGridBuilder, csv_to_hex_csv, write_geoparquet,
 };
 pub use core::{
     CELL_RADIUS, CELL_WIDTHS, GRID_EXTENTS, HexagonDims, IDENTIFIER_VERSION, MAX_ZOOM_LEVEL,

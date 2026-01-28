@@ -1,5 +1,6 @@
 use crate::api::hex_cell::HexCell;
 use crate::util::error::N3gbError;
+use geo::Centroid;
 use geo_types::Geometry;
 use geojson::GeoJson;
 use std::collections::HashSet;
@@ -7,6 +8,12 @@ use std::fs::File;
 use std::path::Path;
 use std::str::FromStr;
 use wkt::Wkt;
+
+/// For the type of geometry source in the file
+enum SourceIndices {
+    Geometry(usize),
+    Coordinates { x_idx: usize, y_idx: usize },
+}
 
 /// Coordinate reference system for input geometry data.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -27,10 +34,19 @@ pub enum GeometryFormat {
     GeoJson,
 }
 
+/// Specifies how to extract location data from CSV rows.
+#[derive(Debug, Clone)]
+pub enum CoordinateSource {
+    /// A single column containing WKT or GeoJSON geometry
+    GeometryColumn(String),
+    /// Separate X and Y coordinate columns (e.g., Easting/Northing or Lon/Lat)
+    CoordinateColumns { x_column: String, y_column: String },
+}
+
 /// Configuration for CSV to hex conversion.
 #[derive(Debug, Clone)]
 pub struct CsvHexConfig {
-    pub geometry_column: String,
+    pub source: CoordinateSource,
     pub exclude_columns: Vec<String>,
     pub zoom_level: u8,
     pub crs: Crs,
@@ -38,9 +54,48 @@ pub struct CsvHexConfig {
 }
 
 impl CsvHexConfig {
+    /// Create config for a CSV with a geometry column (WKT or GeoJSON).
+    ///
+    /// # Example
+    /// ```
+    /// use n3gb_rs::CsvHexConfig;
+    ///
+    /// let config = CsvHexConfig::new("geometry", 12);
+    /// ```
     pub fn new(geometry_column: impl Into<String>, zoom_level: u8) -> Self {
         Self {
-            geometry_column: geometry_column.into(),
+            source: CoordinateSource::GeometryColumn(geometry_column.into()),
+            exclude_columns: Vec::new(),
+            zoom_level,
+            crs: Crs::default(),
+            include_hex_geometry: None,
+        }
+    }
+
+    /// Create config for a CSV with separate X/Y coordinate columns.
+    ///
+    /// # Example
+    /// ```
+    /// use n3gb_rs::{CsvHexConfig, Crs};
+    ///
+    /// // For BNG coordinates (Easting/Northing)
+    /// let config = CsvHexConfig::from_coords("Easting", "Northing", 12)
+    ///     .crs(Crs::Bng);
+    ///
+    /// // For WGS84 coordinates (Longitude/Latitude)
+    /// let config = CsvHexConfig::from_coords("Longitude", "Latitude", 12)
+    ///     .crs(Crs::Wgs84);
+    /// ```
+    pub fn from_coords(
+        x_column: impl Into<String>,
+        y_column: impl Into<String>,
+        zoom_level: u8,
+    ) -> Self {
+        Self {
+            source: CoordinateSource::CoordinateColumns {
+                x_column: x_column.into(),
+                y_column: y_column.into(),
+            },
             exclude_columns: Vec::new(),
             zoom_level,
             crs: Crs::default(),
@@ -83,10 +138,6 @@ impl<P: AsRef<Path>> CsvToHex for P {
     }
 }
 
-// ============================================================================
-// Geometry Parsing
-// ============================================================================
-
 fn parse_geometry(s: &str) -> Result<Geometry<f64>, N3gbError> {
     let trimmed = s.trim();
     if trimmed.starts_with('{') {
@@ -125,10 +176,6 @@ fn parse_wkt(s: &str) -> Result<Geometry<f64>, N3gbError> {
         .map_err(|_| N3gbError::GeometryParseError("Failed to convert WKT to geometry".to_string()))
 }
 
-// ============================================================================
-// Geometry Output Conversion
-// ============================================================================
-
 fn polygon_to_wkt(polygon: &geo_types::Polygon<f64>) -> String {
     use wkt::ToWkt;
     polygon.wkt_string()
@@ -139,17 +186,11 @@ fn polygon_to_geojson(polygon: &geo_types::Polygon<f64>) -> String {
     geom.to_string()
 }
 
-// ============================================================================
-// Geometry to Hex Cells Conversion
-// ============================================================================
-
 fn geometry_to_hex_cells(
     geom: Geometry<f64>,
     zoom: u8,
     crs: Crs,
 ) -> Result<Vec<HexCell>, N3gbError> {
-    use geo::Centroid;
-
     match geom {
         Geometry::Point(pt) => {
             let cell = match crs {
@@ -225,11 +266,11 @@ fn geometry_to_hex_cells(
 // CSV Conversion
 // ============================================================================
 
-/// Converts a CSV file with geometry column to a CSV file with hex IDs.
+/// Converts a CSV file with geometry or coordinate columns to a CSV file with hex IDs.
 ///
 /// Streams output to minimize memory usage for large files.
 ///
-/// # Example (can also use trait method)
+/// # Example with geometry column (WKT or GeoJSON)
 ///
 /// ```no_run
 /// use n3gb_rs::{csv_to_hex_csv, CsvHexConfig, Crs};
@@ -239,6 +280,18 @@ fn geometry_to_hex_cells(
 ///     .crs(Crs::Wgs84);
 ///
 /// csv_to_hex_csv("input.csv", "output.csv", &config).unwrap();
+/// ```
+///
+/// # Example with coordinate columns
+///
+/// ```no_run
+/// use n3gb_rs::{csv_to_hex_csv, CsvHexConfig, Crs};
+///
+/// // For BNG (Easting/Northing)
+/// let config = CsvHexConfig::from_coords("Easting", "Northing", 12)
+///     .crs(Crs::Bng);
+///
+/// csv_to_hex_csv("bus_stops.csv", "output.csv", &config).unwrap();
 /// ```
 pub fn csv_to_hex_csv(
     csv_path: impl AsRef<Path>,
@@ -253,18 +306,32 @@ pub fn csv_to_hex_csv(
         .map_err(|e| N3gbError::CsvError(e.to_string()))?
         .clone();
 
-    let geom_idx = headers
-        .iter()
-        .position(|h| h == config.geometry_column)
-        .ok_or_else(|| {
-            N3gbError::CsvError(format!(
-                "Geometry column '{}' not found",
-                config.geometry_column
-            ))
-        })?;
+    // Determine which columns to exclude based on source type
+    let (source_indices, mut exclude_indices) =
+        match &config.source {
+            CoordinateSource::GeometryColumn(col) => {
+                let idx = headers.iter().position(|h| h == col).ok_or_else(|| {
+                    N3gbError::CsvError(format!("Geometry column '{}' not found", col))
+                })?;
+                let mut exclude = HashSet::new();
+                exclude.insert(idx);
+                (SourceIndices::Geometry(idx), exclude)
+            }
+            CoordinateSource::CoordinateColumns { x_column, y_column } => {
+                let x_idx = headers.iter().position(|h| h == x_column).ok_or_else(|| {
+                    N3gbError::CsvError(format!("X column '{}' not found", x_column))
+                })?;
+                let y_idx = headers.iter().position(|h| h == y_column).ok_or_else(|| {
+                    N3gbError::CsvError(format!("Y column '{}' not found", y_column))
+                })?;
+                let mut exclude = HashSet::new();
+                exclude.insert(x_idx);
+                exclude.insert(y_idx);
+                (SourceIndices::Coordinates { x_idx, y_idx }, exclude)
+            }
+        };
 
-    let mut exclude_indices: HashSet<usize> = HashSet::new();
-    exclude_indices.insert(geom_idx);
+    // Add user-specified exclusions
     for col_name in &config.exclude_columns {
         if let Some(idx) = headers.iter().position(|h| h == col_name) {
             exclude_indices.insert(idx);
@@ -274,6 +341,7 @@ pub fn csv_to_hex_csv(
     let out_file = File::create(output_path).map_err(|e| N3gbError::IoError(e.to_string()))?;
     let mut writer = csv::Writer::from_writer(out_file);
 
+    // Write header row
     let mut header_row: Vec<&str> = vec!["hex_id"];
     if config.include_hex_geometry.is_some() {
         header_row.push("hex_geometry");
@@ -287,15 +355,46 @@ pub fn csv_to_hex_csv(
         .write_record(&header_row)
         .map_err(|e| N3gbError::CsvError(e.to_string()))?;
 
+    // Process rows
     for result in reader.records() {
         let record = result.map_err(|e| N3gbError::CsvError(e.to_string()))?;
 
-        let geom_str = record.get(geom_idx).ok_or_else(|| {
-            N3gbError::CsvError(format!("Missing geometry column at index {}", geom_idx))
-        })?;
+        let cells = match &source_indices {
+            SourceIndices::Geometry(idx) => {
+                let geom_str = record.get(*idx).ok_or_else(|| {
+                    N3gbError::CsvError(format!("Missing geometry column at index {}", idx))
+                })?;
+                let geom = parse_geometry(geom_str)?;
+                geometry_to_hex_cells(geom, config.zoom_level, config.crs)?
+            }
+            SourceIndices::Coordinates { x_idx, y_idx } => {
+                let x_str = record
+                    .get(*x_idx)
+                    .ok_or_else(|| {
+                        N3gbError::CsvError(format!("Missing X column at index {}", x_idx))
+                    })?
+                    .trim();
+                let y_str = record
+                    .get(*y_idx)
+                    .ok_or_else(|| {
+                        N3gbError::CsvError(format!("Missing Y column at index {}", y_idx))
+                    })?
+                    .trim();
 
-        let geom = parse_geometry(geom_str)?;
-        let cells = geometry_to_hex_cells(geom, config.zoom_level, config.crs)?;
+                let x: f64 = x_str.parse().map_err(|_| {
+                    N3gbError::CsvError(format!("Invalid X coordinate: '{}'", x_str))
+                })?;
+                let y: f64 = y_str.parse().map_err(|_| {
+                    N3gbError::CsvError(format!("Invalid Y coordinate: '{}'", y_str))
+                })?;
+
+                let cell = match config.crs {
+                    Crs::Wgs84 => HexCell::from_wgs84(&(x, y), config.zoom_level)?,
+                    Crs::Bng => HexCell::from_bng(&(x, y), config.zoom_level)?,
+                };
+                vec![cell]
+            }
+        };
 
         for cell in cells {
             let mut row: Vec<String> = vec![cell.id.clone()];
@@ -443,5 +542,54 @@ mod tests {
     #[test]
     fn test_crs_enum_default() {
         assert_eq!(Crs::default(), Crs::Wgs84);
+    }
+
+    #[test]
+    fn test_csv_from_coords_bng() -> Result<(), N3gbError> {
+        let dir = tempdir().map_err(|e| N3gbError::IoError(e.to_string()))?;
+        let csv_path = dir.path().join("test.csv");
+        let output_path = dir.path().join("output.csv");
+
+        let mut file = File::create(&csv_path).map_err(|e| N3gbError::IoError(e.to_string()))?;
+        writeln!(file, "StopCode,Name,Easting,Northing")
+            .map_err(|e| N3gbError::IoError(e.to_string()))?;
+        writeln!(file, "ABC123,Temple Meads,359581,172304")
+            .map_err(|e| N3gbError::IoError(e.to_string()))?;
+        writeln!(file, "DEF456,Castle Park,358500,173100")
+            .map_err(|e| N3gbError::IoError(e.to_string()))?;
+
+        let config = CsvHexConfig::from_coords("Easting", "Northing", 12).crs(Crs::Bng);
+        csv_to_hex_csv(&csv_path, &output_path, &config)?;
+
+        assert!(output_path.exists());
+
+        let output =
+            std::fs::read_to_string(&output_path).map_err(|e| N3gbError::IoError(e.to_string()))?;
+        assert!(output.contains("hex_id"));
+        assert!(output.contains("StopCode"));
+        assert!(output.contains("Name"));
+        assert!(!output.contains(",Easting,"));
+        assert!(!output.contains(",Northing"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_csv_from_coords_wgs84() -> Result<(), N3gbError> {
+        let dir = tempdir().map_err(|e| N3gbError::IoError(e.to_string()))?;
+        let csv_path = dir.path().join("test.csv");
+        let output_path = dir.path().join("output.csv");
+
+        let mut file = File::create(&csv_path).map_err(|e| N3gbError::IoError(e.to_string()))?;
+        writeln!(file, "ID,Longitude,Latitude,Description")
+            .map_err(|e| N3gbError::IoError(e.to_string()))?;
+        writeln!(file, "1,-2.58302,51.44827,Bristol Temple Meads")
+            .map_err(|e| N3gbError::IoError(e.to_string()))?;
+
+        let config = CsvHexConfig::from_coords("Longitude", "Latitude", 12).crs(Crs::Wgs84);
+        csv_to_hex_csv(&csv_path, &output_path, &config)?;
+
+        assert!(output_path.exists());
+        Ok(())
     }
 }
