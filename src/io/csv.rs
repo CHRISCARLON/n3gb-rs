@@ -1,5 +1,5 @@
-use crate::api::hex_cell::HexCell;
-use crate::util::error::N3gbError;
+use crate::cell::HexCell;
+use crate::error::N3gbError;
 use geo::Centroid;
 use geo_types::Geometry;
 use geojson::GeoJson;
@@ -9,7 +9,6 @@ use std::path::Path;
 use std::str::FromStr;
 use wkt::Wkt;
 
-/// For the type of geometry source in the file
 enum SourceIndices {
     Geometry(usize),
     Coordinates { x_idx: usize, y_idx: usize },
@@ -25,7 +24,6 @@ pub enum Crs {
     Bng,
 }
 
-/// Output format for hex polygon geometries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GeometryFormat {
     /// Well-Known Text format (e.g., "POLYGON((...))")
@@ -34,7 +32,6 @@ pub enum GeometryFormat {
     GeoJson,
 }
 
-/// Specifies how to extract location data from CSV rows.
 #[derive(Debug, Clone)]
 pub enum CoordinateSource {
     /// A single column containing WKT or GeoJSON geometry
@@ -43,7 +40,6 @@ pub enum CoordinateSource {
     CoordinateColumns { x_column: String, y_column: String },
 }
 
-/// Configuration for CSV to hex conversion.
 #[derive(Debug, Clone)]
 pub struct CsvHexConfig {
     pub source: CoordinateSource,
@@ -113,7 +109,7 @@ impl CsvHexConfig {
         self
     }
 
-    /// Include hex polygon geometry in output.
+    // Include hex polygon geometry in output.
     pub fn with_hex_geometry(mut self, format: GeometryFormat) -> Self {
         self.include_hex_geometry = Some(format);
         self
@@ -262,10 +258,6 @@ fn geometry_to_hex_cells(
     }
 }
 
-// ============================================================================
-// CSV Conversion
-// ============================================================================
-
 /// Converts a CSV file with geometry or coordinate columns to a CSV file with hex IDs.
 ///
 /// Streams output to minimize memory usage for large files.
@@ -307,6 +299,8 @@ pub fn csv_to_hex_csv(
         .clone();
 
     // Determine which columns to exclude based on source type
+    // Best practice is to always exclude ANY geometry column
+    // TODO: Do this by default or throw and error when not?
     let (source_indices, mut exclude_indices) =
         match &config.source {
             CoordinateSource::GeometryColumn(col) => {
@@ -331,7 +325,6 @@ pub fn csv_to_hex_csv(
             }
         };
 
-    // Add user-specified exclusions
     for col_name in &config.exclude_columns {
         if let Some(idx) = headers.iter().position(|h| h == col_name) {
             exclude_indices.insert(idx);
@@ -341,7 +334,6 @@ pub fn csv_to_hex_csv(
     let out_file = File::create(output_path).map_err(|e| N3gbError::IoError(e.to_string()))?;
     let mut writer = csv::Writer::from_writer(out_file);
 
-    // Write header row
     let mut header_row: Vec<&str> = vec!["hex_id"];
     if config.include_hex_geometry.is_some() {
         header_row.push("hex_geometry");
@@ -355,7 +347,6 @@ pub fn csv_to_hex_csv(
         .write_record(&header_row)
         .map_err(|e| N3gbError::CsvError(e.to_string()))?;
 
-    // Process rows
     for result in reader.records() {
         let record = result.map_err(|e| N3gbError::CsvError(e.to_string()))?;
 

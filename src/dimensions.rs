@@ -1,4 +1,4 @@
-use crate::util::error::N3gbError;
+use crate::error::N3gbError;
 
 /// All dimensions of a regular hexagon computed from a single input measurement.
 ///

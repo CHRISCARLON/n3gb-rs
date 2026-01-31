@@ -1,39 +1,8 @@
-use crate::util::error::N3gbError;
+use crate::error::N3gbError;
 use geo_types::{Coord, LineString, MultiPolygon, Point, Polygon};
 use proj::Proj;
 use rayon::prelude::*;
 use std::cell::RefCell;
-
-// This is where we transform Wsg84 coords into BNG coords
-
-/// Trait for types that can provide x/y coordinates.
-///
-/// Implemented for `(f64, f64)` tuples and `geo_types::Point<f64>`.
-/// This allows functions to accept either type.
-pub trait Coordinate {
-    /// Returns the x-coordinate (easting or longitude).
-    fn x(&self) -> f64;
-    /// Returns the y-coordinate (northing or latitude).
-    fn y(&self) -> f64;
-}
-
-impl Coordinate for (f64, f64) {
-    fn x(&self) -> f64 {
-        self.0
-    }
-    fn y(&self) -> f64 {
-        self.1
-    }
-}
-
-impl Coordinate for Point<f64> {
-    fn x(&self) -> f64 {
-        Point::x(*self)
-    }
-    fn y(&self) -> f64 {
-        Point::y(*self)
-    }
-}
 
 thread_local! {
     static WGS84_TO_BNG_PROJ_OBJECT: RefCell<Option<Proj>> = const { RefCell::new(None) };
@@ -51,7 +20,7 @@ where
                     .map_err(|e| N3gbError::ProjectionError(e.to_string()))?,
             );
         }
-        proj_closure(borrow.as_ref().unwrap()) // Note to self to remember that this is where we deref and get the &Proj to call the closure we passed in
+        proj_closure(borrow.as_ref().unwrap())
     })
 }
 
@@ -68,7 +37,7 @@ where
 /// # Ok(())
 /// # }
 /// ```
-pub fn wgs84_to_bng<C: Coordinate>(coord: &C) -> Result<Point<f64>, N3gbError> {
+pub fn wgs84_to_bng<C: super::Coordinate>(coord: &C) -> Result<Point<f64>, N3gbError> {
     with_wgs84_to_bng_proj(|proj| {
         let (easting, northing) = proj
             .convert((coord.x(), coord.y()))
@@ -111,6 +80,7 @@ pub fn wgs84_multipolygon_to_bng(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::coord::Coordinate;
 
     #[test]
     fn test_wgs84_to_bng() -> Result<(), N3gbError> {
@@ -119,20 +89,6 @@ mod tests {
         assert!(bng.x() > 380000.0 && bng.x() < 390000.0);
         assert!(bng.y() > 390000.0 && bng.y() < 400000.0);
         Ok(())
-    }
-
-    #[test]
-    fn test_coordinate_trait_tuple() {
-        let tuple = (100.0, 200.0);
-        assert_eq!(tuple.x(), 100.0);
-        assert_eq!(tuple.y(), 200.0);
-    }
-
-    #[test]
-    fn test_coordinate_trait_point() {
-        let point = Point::new(100.0, 200.0);
-        assert_eq!(point.x(), 100.0);
-        assert_eq!(point.y(), 200.0);
     }
 
     #[test]

@@ -60,20 +60,33 @@
 //! ```
 //!
 
-pub mod api;
-pub mod core;
-pub mod util;
+mod geom;
+mod cell;
+mod coord;
+mod dimensions;
+mod error;
+mod grid;
+mod index;
+mod io;
 
-pub use api::{
-    CoordinateSource, Crs, CsvHexConfig, CsvToHex, GeometryFormat, HexCell, HexCellsToArrow,
-    HexCellsToGeoParquet, HexGrid, HexGridBuilder, csv_to_hex_csv, write_geoparquet,
+pub use cell::HexCell;
+pub use coord::{Coordinate, wgs84_to_bng};
+pub use dimensions::{
+    HexagonDims, bounding_box, from_across_corners, from_across_flats, from_apothem, from_area,
+    from_circumradius, from_side,
 };
-pub use core::{
-    CELL_RADIUS, CELL_WIDTHS, GRID_EXTENTS, HexagonDims, IDENTIFIER_VERSION, MAX_ZOOM_LEVEL,
-    bounding_box, create_hexagon, from_across_corners, from_across_flats, from_apothem, from_area,
-    from_circumradius, from_side, point_to_row_col, row_col_to_center,
+pub use error::N3gbError;
+pub use grid::{HexGrid, HexGridBuilder};
+pub use index::{
+    CELL_RADIUS, CELL_WIDTHS, GRID_EXTENTS, IDENTIFIER_VERSION, MAX_ZOOM_LEVEL,
+    decode_hex_identifier, generate_hex_identifier, point_to_row_col, row_col_to_center,
 };
-pub use util::{Coordinate, N3gbError, decode_hex_identifier, generate_identifier, wgs84_to_bng};
+pub use io::{
+    CoordinateSource, Crs, CsvHexConfig, CsvToHex, GeometryFormat, HexCellsToArrow,
+    HexCellsToGeoParquet, csv_to_hex_csv, write_geoparquet,
+};
+
+pub use geom::create_hexagon;
 
 pub use geo_types;
 pub use geoarrow_array;

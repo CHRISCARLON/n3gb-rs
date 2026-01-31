@@ -1,9 +1,7 @@
-use crate::core::constants::{IDENTIFIER_VERSION, SCALE_FACTOR};
-use crate::util::error::N3gbError;
-use base64::Engine;
+use crate::error::N3gbError;
+use crate::index::constants::{IDENTIFIER_VERSION, SCALE_FACTOR};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-
-// This is where we generate the actual identifiers or decode back into version, easting, northing, zoom
+use base64::Engine;
 
 /// Generates a unique hex cell identifier from BNG coordinates and zoom level.
 ///
@@ -31,13 +29,13 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 ///
 /// # Example
 /// ```
-/// use n3gb_rs::util::identifier::generate_identifier;
+/// use n3gb_rs::generate_hex_identifier;
 ///
-/// let id = generate_identifier(457500.0, 340000.0, 10);
+/// let id = generate_hex_identifier(457500.0, 340000.0, 10);
 /// assert!(!id.is_empty());
 /// println!("{}", id);
 /// ```
-pub fn generate_identifier(easting: f64, northing: f64, zoom_level: u8) -> String {
+pub fn generate_hex_identifier(easting: f64, northing: f64, zoom_level: u8) -> String {
     let easting_int = (easting * SCALE_FACTOR as f64).round() as u64;
     let northing_int = (northing * SCALE_FACTOR as f64).round() as u64;
 
@@ -74,9 +72,9 @@ pub fn generate_identifier(easting: f64, northing: f64, zoom_level: u8) -> Strin
 ///
 /// # Example
 /// ```
-/// use n3gb_rs::util::identifier::{generate_identifier, decode_hex_identifier};
+/// use n3gb_rs::{generate_hex_identifier, decode_hex_identifier};
 ///
-/// let id = generate_identifier(457500.0, 340000.0, 10);
+/// let id = generate_hex_identifier(457500.0, 340000.0, 10);
 /// let (version, easting, northing, zoom) = decode_hex_identifier(&id).unwrap();
 ///
 /// assert_eq!(version, 1);
@@ -139,7 +137,7 @@ mod tests {
         let northing = 847702.123;
         let zoom = 10;
 
-        let id = generate_identifier(easting, northing, zoom);
+        let id = generate_hex_identifier(easting, northing, zoom);
         assert!(!id.is_empty());
 
         let (version, decoded_e, decoded_n, decoded_z) = decode_hex_identifier(&id)?;
@@ -159,7 +157,7 @@ mod tests {
 
     #[test]
     fn test_identifier_output() {
-        let id = generate_identifier(457500.0, 340000.0, 10);
+        let id = generate_hex_identifier(457500.0, 340000.0, 10);
         println!("Generated identifier: {}", id);
         println!("Length: {} chars", id.len());
 
