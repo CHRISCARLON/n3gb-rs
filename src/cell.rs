@@ -1,11 +1,11 @@
-use crate::api::hex_arrow::HexCellsToArrow;
-use crate::api::hex_parquet::HexCellsToGeoParquet;
-use crate::core::constants::CELL_RADIUS;
-use crate::core::geometry::create_hexagon;
-use crate::core::grid::{point_to_row_col, row_col_to_center};
-use crate::util::coord::{Coordinate, wgs84_line_to_bng, wgs84_to_bng};
-use crate::util::error::N3gbError;
-use crate::util::identifier::{decode_hex_identifier, generate_identifier};
+use crate::geom::create_hexagon;
+use crate::coord::{Coordinate, wgs84_line_to_bng, wgs84_to_bng};
+use crate::error::N3gbError;
+use crate::index::{
+    CELL_RADIUS, decode_hex_identifier, generate_hex_identifier, point_to_row_col, row_col_to_center,
+};
+use crate::io::arrow::HexCellsToArrow;
+use crate::io::parquet::HexCellsToGeoParquet;
 use arrow_array::RecordBatch;
 use geo_types::{LineString, Point, Polygon};
 use geoarrow_array::array::{PointArray, PolygonArray};
@@ -28,7 +28,7 @@ use std::path::Path;
 /// println!("Cell ID: {}", cell.id);
 /// println!("Center: ({}, {})", cell.easting(), cell.northing());
 ///
-/// // Convert to polygon for GIS operations
+/// // Convert the cell to a polygon for GIS operations (like wanging it on a map)
 /// let polygon = cell.to_polygon();
 /// # Ok(())
 /// # }
@@ -84,7 +84,7 @@ impl HexCell {
         })
     }
 
-    /// Create HexCells along a LineString in BNG coordinates.
+    /// Create HexCells from  a LineString in BNG coordinates.
     ///
     /// Samples points along the line and returns all unique cells that intersect it.
     pub fn from_line_string_bng(line: &LineString, zoom: u8) -> Result<Vec<Self>, N3gbError> {
@@ -100,6 +100,7 @@ impl HexCell {
                 (dx * dx + dy * dy).sqrt()
             })
             .sum();
+
         let estimated_cells = ((total_length / cell_radius) * 1.5) as usize + line.0.len();
 
         let mut seen: HashSet<(i64, i64)> = HashSet::with_capacity(estimated_cells);
@@ -127,7 +128,7 @@ impl HexCell {
 
                 if seen.insert((row, col)) {
                     let center = row_col_to_center(row, col, zoom)?;
-                    let id = generate_identifier(center.x(), center.y(), zoom);
+                    let id = generate_hex_identifier(center.x(), center.y(), zoom);
                     cells.push(HexCell::new(id, center, zoom, row, col));
                 }
             }
@@ -163,7 +164,7 @@ impl HexCell {
     pub fn from_bng(coord: &impl Coordinate, zoom: u8) -> Result<Self, N3gbError> {
         let (row, col) = point_to_row_col(coord, zoom)?;
         let center = row_col_to_center(row, col, zoom)?;
-        let id = generate_identifier(center.x(), center.y(), zoom);
+        let id = generate_hex_identifier(center.x(), center.y(), zoom);
 
         Ok(Self {
             id,

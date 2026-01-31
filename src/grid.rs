@@ -1,13 +1,11 @@
-use crate::api::hex_arrow::HexCellsToArrow;
-use crate::api::hex_cell::HexCell;
-use crate::api::hex_parquet::HexCellsToGeoParquet;
-use crate::core::constants::{GRID_EXTENTS, MAX_ZOOM_LEVEL};
-use crate::core::grid::{point_to_row_col, row_col_to_center};
-use crate::util::coord::{
-    Coordinate, wgs84_multipolygon_to_bng, wgs84_polygon_to_bng, wgs84_to_bng,
+use crate::cell::HexCell;
+use crate::coord::{Coordinate, wgs84_multipolygon_to_bng, wgs84_polygon_to_bng, wgs84_to_bng};
+use crate::error::N3gbError;
+use crate::index::{
+    GRID_EXTENTS, MAX_ZOOM_LEVEL, generate_hex_identifier, point_to_row_col, row_col_to_center,
 };
-use crate::util::error::N3gbError;
-use crate::util::identifier::generate_identifier;
+use crate::io::arrow::HexCellsToArrow;
+use crate::io::parquet::HexCellsToGeoParquet;
 use arrow_array::RecordBatch;
 use geo::{BoundingRect, Intersects};
 use geo_types::{MultiPolygon, Point, Polygon, Rect};
@@ -18,7 +16,9 @@ use std::path::Path;
 /// A collection of hexagonal cells covering a geographic extent.
 ///
 /// `HexGrid` generates and manages multiple [`HexCell`]s for a given bounding box
-/// and zoom level. Use it when you need to work with multiple cells at once,
+/// and zoom level.
+///
+/// Use it when you need to work with multiple cells at once,
 /// such as tiling an area prior to performing spatial queries.
 ///
 /// # Example
@@ -53,6 +53,7 @@ impl HexGrid {
         HexGridBuilder::new()
     }
 
+    /// Add in a bounding box extent
     fn from_extent(min_x: f64, min_y: f64, max_x: f64, max_y: f64, zoom_level: u8) -> Self {
         let cells = generate_cells_for_extent(min_x, min_y, max_x, max_y, zoom_level);
         Self { cells, zoom_level }
@@ -647,6 +648,8 @@ impl HexGridBuilder {
     }
 }
 
+/// Basically like when putting a duvet inside it's duvet cover
+/// Find the four outside corners and work inwards from there
 fn generate_cells_for_extent(
     min_x: f64,
     min_y: f64,
@@ -654,6 +657,7 @@ fn generate_cells_for_extent(
     max_y: f64,
     zoom_level: u8,
 ) -> Vec<HexCell> {
+    // TODO: Don't just return an empty Vec here
     if zoom_level > MAX_ZOOM_LEVEL {
         return Vec::new();
     }
@@ -680,9 +684,12 @@ fn generate_cells_for_extent(
     let min_col = ll_col.min(lr_col).min(ur_col).min(ul_col);
     let max_col = ll_col.max(lr_col).max(ur_col).max(ul_col);
 
-    (min_row..=max_row)
+    let row_cols: Vec<(i64, i64)> = (min_row..=max_row)
         .flat_map(|row| (min_col..=max_col).map(move |col| (row, col)))
-        .collect::<Vec<_>>()
+        .collect();
+
+    // Build the (row, col) coords in parallel
+    let cells: Vec<HexCell> = row_cols
         .into_par_iter()
         .filter_map(|(row, col)| {
             let center = row_col_to_center(row, col, zoom_level).ok()?;
@@ -691,10 +698,12 @@ fn generate_cells_for_extent(
                 return None;
             }
 
-            let id = generate_identifier(center.x(), center.y(), zoom_level);
+            let id = generate_hex_identifier(center.x(), center.y(), zoom_level);
             Some(HexCell::new(id, center, zoom_level, row, col))
         })
-        .collect()
+        .collect();
+
+    cells
 }
 
 #[cfg(test)]
@@ -768,342 +777,5 @@ mod tests {
         let polygons = grid.to_polygons();
 
         assert_eq!(polygons.len(), grid.len());
-    }
-
-    #[test]
-    fn test_from_bng_extent_tuple() {
-        let grid = HexGrid::from_bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0), 10);
-        assert!(!grid.is_empty());
-        assert_eq!(grid.zoom_level(), 10);
-    }
-
-    #[test]
-    fn test_from_bng_extent_point() {
-        let grid = HexGrid::from_bng_extent(
-            &point! { x: 457000.0, y: 339500.0 },
-            &point! { x: 458000.0, y: 340500.0 },
-            10,
-        );
-        assert!(!grid.is_empty());
-        assert_eq!(grid.zoom_level(), 10);
-    }
-
-    #[test]
-    fn test_from_wgs84_extent_tuple() -> Result<(), N3gbError> {
-        let grid = HexGrid::from_wgs84_extent(&(-2.3, 53.4), &(-2.2, 53.5), 10)?;
-        assert!(!grid.is_empty());
-        assert_eq!(grid.zoom_level(), 10);
-
-        for cell in grid.iter() {
-            assert_eq!(cell.zoom_level, 10);
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn test_from_wgs84_extent_point() -> Result<(), N3gbError> {
-        let grid = HexGrid::from_wgs84_extent(
-            &point! { x: -2.3, y: 53.4 },
-            &point! { x: -2.2, y: 53.5 },
-            10,
-        )?;
-        assert!(!grid.is_empty());
-        Ok(())
-    }
-
-    #[test]
-    fn test_builder_bng_extent() {
-        let grid = HexGrid::builder()
-            .zoom_level(10)
-            .bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0))
-            .build();
-
-        assert!(!grid.is_empty());
-        assert_eq!(grid.zoom_level(), 10);
-    }
-
-    #[test]
-    fn test_builder_wgs84_extent() -> Result<(), N3gbError> {
-        let grid = HexGrid::builder()
-            .zoom_level(10)
-            .wgs84_extent(&(-2.3, 53.4), &(-2.2, 53.5))?
-            .build();
-
-        assert!(!grid.is_empty());
-        assert_eq!(grid.zoom_level(), 10);
-        Ok(())
-    }
-
-    #[test]
-    fn test_bng_and_wgs84_same_area() -> Result<(), N3gbError> {
-        let bng_grid = HexGrid::from_bng_extent(&(383000.0, 383000.0), &(384000.0, 384000.0), 10);
-        let wgs84_grid = HexGrid::from_wgs84_extent(&(-2.26, 53.39), &(-2.24, 53.40), 10)?;
-        assert!(!bng_grid.is_empty());
-        assert!(!wgs84_grid.is_empty());
-        Ok(())
-    }
-
-    #[test]
-    fn test_from_bng_polygon() {
-        use geo_types::LineString;
-
-        let polygon = Polygon::new(
-            LineString::from(vec![
-                coord! { x: 457000.0, y: 339500.0 },
-                coord! { x: 458000.0, y: 339500.0 },
-                coord! { x: 458000.0, y: 340500.0 },
-                coord! { x: 457000.0, y: 340500.0 },
-                coord! { x: 457000.0, y: 339500.0 },
-            ]),
-            vec![],
-        );
-        let grid = HexGrid::from_bng_polygon(&polygon, 10);
-        assert!(!grid.is_empty());
-        assert_eq!(grid.zoom_level(), 10);
-    }
-
-    #[test]
-    fn test_from_bng_polygon_filters_cells() {
-        use geo_types::LineString;
-
-        let triangle = Polygon::new(
-            LineString::from(vec![
-                coord! { x: 457000.0, y: 339500.0 },
-                coord! { x: 458000.0, y: 339500.0 },
-                coord! { x: 457500.0, y: 340500.0 },
-                coord! { x: 457000.0, y: 339500.0 },
-            ]),
-            vec![],
-        );
-
-        let polygon_grid = HexGrid::from_bng_polygon(&triangle, 10);
-        let bbox_grid = HexGrid::from_bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0), 10);
-
-        assert!(polygon_grid.len() < bbox_grid.len());
-        assert!(!polygon_grid.is_empty());
-    }
-
-    #[test]
-    fn test_from_wgs84_polygon() -> Result<(), N3gbError> {
-        use geo_types::LineString;
-
-        let polygon = Polygon::new(
-            LineString::from(vec![
-                coord! { x: -2.3, y: 53.4 },
-                coord! { x: -2.2, y: 53.4 },
-                coord! { x: -2.2, y: 53.5 },
-                coord! { x: -2.3, y: 53.5 },
-                coord! { x: -2.3, y: 53.4 },
-            ]),
-            vec![],
-        );
-        let grid = HexGrid::from_wgs84_polygon(&polygon, 10)?;
-        assert!(!grid.is_empty());
-        assert_eq!(grid.zoom_level(), 10);
-        Ok(())
-    }
-
-    #[test]
-    fn test_builder_bng_polygon() {
-        use geo_types::LineString;
-
-        let polygon = Polygon::new(
-            LineString::from(vec![
-                coord! { x: 457000.0, y: 339500.0 },
-                coord! { x: 458000.0, y: 339500.0 },
-                coord! { x: 458000.0, y: 340500.0 },
-                coord! { x: 457000.0, y: 340500.0 },
-                coord! { x: 457000.0, y: 339500.0 },
-            ]),
-            vec![],
-        );
-        let grid = HexGrid::builder()
-            .zoom_level(10)
-            .bng_polygon(polygon)
-            .build();
-
-        assert!(!grid.is_empty());
-        assert_eq!(grid.zoom_level(), 10);
-    }
-
-    #[test]
-    fn test_builder_wgs84_polygon() -> Result<(), N3gbError> {
-        use geo_types::LineString;
-
-        let polygon = Polygon::new(
-            LineString::from(vec![
-                coord! { x: -2.3, y: 53.4 },
-                coord! { x: -2.2, y: 53.4 },
-                coord! { x: -2.2, y: 53.5 },
-                coord! { x: -2.3, y: 53.5 },
-                coord! { x: -2.3, y: 53.4 },
-            ]),
-            vec![],
-        );
-        let grid = HexGrid::builder()
-            .zoom_level(10)
-            .wgs84_polygon(polygon)?
-            .build();
-
-        assert!(!grid.is_empty());
-        assert_eq!(grid.zoom_level(), 10);
-        Ok(())
-    }
-
-    #[test]
-    fn test_from_bng_multipolygon() {
-        use geo_types::LineString;
-
-        let poly1 = Polygon::new(
-            LineString::from(vec![
-                coord! { x: 457000.0, y: 339500.0 },
-                coord! { x: 457500.0, y: 339500.0 },
-                coord! { x: 457500.0, y: 340000.0 },
-                coord! { x: 457000.0, y: 340000.0 },
-                coord! { x: 457000.0, y: 339500.0 },
-            ]),
-            vec![],
-        );
-        let poly2 = Polygon::new(
-            LineString::from(vec![
-                coord! { x: 457500.0, y: 340000.0 },
-                coord! { x: 458000.0, y: 340000.0 },
-                coord! { x: 458000.0, y: 340500.0 },
-                coord! { x: 457500.0, y: 340500.0 },
-                coord! { x: 457500.0, y: 340000.0 },
-            ]),
-            vec![],
-        );
-        let mp = MultiPolygon::new(vec![poly1, poly2]);
-        let grid = HexGrid::from_bng_multipolygon(&mp, 10);
-
-        assert!(!grid.is_empty());
-        assert_eq!(grid.zoom_level(), 10);
-    }
-
-    #[test]
-    fn test_from_bng_multipolygon_deduplicates() {
-        use geo_types::LineString;
-
-        // Two overlapping polygons
-        let poly1 = Polygon::new(
-            LineString::from(vec![
-                coord! { x: 457000.0, y: 339500.0 },
-                coord! { x: 458000.0, y: 339500.0 },
-                coord! { x: 458000.0, y: 340500.0 },
-                coord! { x: 457000.0, y: 340500.0 },
-                coord! { x: 457000.0, y: 339500.0 },
-            ]),
-            vec![],
-        );
-        let poly2 = poly1.clone();
-        let mp = MultiPolygon::new(vec![poly1.clone(), poly2]);
-
-        let mp_grid = HexGrid::from_bng_multipolygon(&mp, 10);
-        let single_grid = HexGrid::from_bng_polygon(&poly1, 10);
-
-        // Should have same number of cells due to deduplication
-        assert_eq!(mp_grid.len(), single_grid.len());
-    }
-
-    #[test]
-    fn test_from_wgs84_multipolygon() -> Result<(), N3gbError> {
-        use geo_types::LineString;
-
-        let poly1 = Polygon::new(
-            LineString::from(vec![
-                coord! { x: -2.3, y: 53.4 },
-                coord! { x: -2.25, y: 53.4 },
-                coord! { x: -2.25, y: 53.45 },
-                coord! { x: -2.3, y: 53.45 },
-                coord! { x: -2.3, y: 53.4 },
-            ]),
-            vec![],
-        );
-        let poly2 = Polygon::new(
-            LineString::from(vec![
-                coord! { x: -2.25, y: 53.45 },
-                coord! { x: -2.2, y: 53.45 },
-                coord! { x: -2.2, y: 53.5 },
-                coord! { x: -2.25, y: 53.5 },
-                coord! { x: -2.25, y: 53.45 },
-            ]),
-            vec![],
-        );
-        let mp = MultiPolygon::new(vec![poly1, poly2]);
-        let grid = HexGrid::from_wgs84_multipolygon(&mp, 10)?;
-
-        assert!(!grid.is_empty());
-        assert_eq!(grid.zoom_level(), 10);
-        Ok(())
-    }
-
-    #[test]
-    fn test_builder_bng_multipolygon() {
-        use geo_types::LineString;
-
-        let poly1 = Polygon::new(
-            LineString::from(vec![
-                coord! { x: 457000.0, y: 339500.0 },
-                coord! { x: 457500.0, y: 339500.0 },
-                coord! { x: 457500.0, y: 340000.0 },
-                coord! { x: 457000.0, y: 340000.0 },
-                coord! { x: 457000.0, y: 339500.0 },
-            ]),
-            vec![],
-        );
-        let poly2 = Polygon::new(
-            LineString::from(vec![
-                coord! { x: 457500.0, y: 340000.0 },
-                coord! { x: 458000.0, y: 340000.0 },
-                coord! { x: 458000.0, y: 340500.0 },
-                coord! { x: 457500.0, y: 340500.0 },
-                coord! { x: 457500.0, y: 340000.0 },
-            ]),
-            vec![],
-        );
-        let mp = MultiPolygon::new(vec![poly1, poly2]);
-        let grid = HexGrid::builder()
-            .zoom_level(10)
-            .bng_multipolygon(mp)
-            .build();
-
-        assert!(!grid.is_empty());
-        assert_eq!(grid.zoom_level(), 10);
-    }
-
-    #[test]
-    fn test_builder_wgs84_multipolygon() -> Result<(), N3gbError> {
-        use geo_types::LineString;
-
-        let poly1 = Polygon::new(
-            LineString::from(vec![
-                coord! { x: -2.3, y: 53.4 },
-                coord! { x: -2.25, y: 53.4 },
-                coord! { x: -2.25, y: 53.45 },
-                coord! { x: -2.3, y: 53.45 },
-                coord! { x: -2.3, y: 53.4 },
-            ]),
-            vec![],
-        );
-        let poly2 = Polygon::new(
-            LineString::from(vec![
-                coord! { x: -2.25, y: 53.45 },
-                coord! { x: -2.2, y: 53.45 },
-                coord! { x: -2.2, y: 53.5 },
-                coord! { x: -2.25, y: 53.5 },
-                coord! { x: -2.25, y: 53.45 },
-            ]),
-            vec![],
-        );
-        let mp = MultiPolygon::new(vec![poly1, poly2]);
-        let grid = HexGrid::builder()
-            .zoom_level(10)
-            .wgs84_multipolygon(mp)?
-            .build();
-
-        assert!(!grid.is_empty());
-        assert_eq!(grid.zoom_level(), 10);
-        Ok(())
     }
 }

@@ -1,6 +1,6 @@
-use crate::api::hex_arrow::HexCellsToArrow;
-use crate::api::hex_cell::HexCell;
-use crate::util::error::N3gbError;
+use crate::cell::HexCell;
+use crate::error::N3gbError;
+use crate::io::arrow::HexCellsToArrow;
 use arrow_array::RecordBatch;
 use geoparquet::writer::{
     GeoParquetRecordBatchEncoder, GeoParquetWriterEncoding, GeoParquetWriterOptionsBuilder,

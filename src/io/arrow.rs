@@ -1,10 +1,10 @@
-use crate::api::hex_cell::HexCell;
-use crate::util::error::N3gbError;
+use crate::cell::HexCell;
+use crate::error::N3gbError;
 use arrow_array::{Float64Array, Int64Array, RecordBatch, StringArray, UInt8Array};
 use arrow_schema::{DataType, Field, Schema};
-use geoarrow_array::IntoArrow;
 use geoarrow_array::array::{PointArray, PolygonArray};
 use geoarrow_array::builder::{PointBuilder, PolygonBuilder};
+use geoarrow_array::IntoArrow;
 use geoarrow_schema::{Crs, Dimension, Metadata, PointType, PolygonType};
 use rayon::prelude::*;
 use std::sync::Arc;
@@ -43,7 +43,6 @@ impl HexCellsToArrow for [HexCell] {
         PolygonBuilder::from_polygons(&polygons, poly).finish()
     }
 
-    // TODO: Currently just bangs it all into one RecordBatch is this the best way?
     fn to_record_batch(&self) -> Result<RecordBatch, N3gbError> {
         let polygon_array = self.to_arrow_polygons();
         let ids: StringArray = self.iter().map(|c| Some(c.id.as_str())).collect();
@@ -97,7 +96,6 @@ impl HexCellsToArrow for Vec<HexCell> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::N3gbError;
     use geoarrow_array::GeoArrowArray;
 
     #[test]

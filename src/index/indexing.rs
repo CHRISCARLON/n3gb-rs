@@ -1,6 +1,8 @@
-use crate::core::constants::{CELL_RADIUS, CELL_WIDTHS, GRID_EXTENTS, MAX_ZOOM_LEVEL};
-use crate::util::coord::Coordinate;
-use crate::util::error::N3gbError;
+use crate::coord::Coordinate;
+use crate::error::N3gbError;
+use crate::index::constants::{
+    CELL_RADIUS as RADIUS, CELL_WIDTHS as WIDTHS, GRID_EXTENTS as EXTENTS, MAX_ZOOM_LEVEL,
+};
 use geo_types::Point;
 
 /// Converts a BNG coordinate to hex grid row/column indices.
@@ -11,13 +13,13 @@ pub fn point_to_row_col<C: Coordinate>(coord: &C, z: u8) -> Result<(i64, i64), N
         return Err(N3gbError::InvalidZoomLevel(z));
     }
 
-    let hex_width = CELL_WIDTHS[z as usize];
-    let r = CELL_RADIUS[z as usize];
+    let hex_width = WIDTHS[z as usize];
+    let r = RADIUS[z as usize];
     let dx = hex_width;
     let dy = 1.5 * r;
 
-    let qx = (coord.x() - GRID_EXTENTS[0]) / dx;
-    let ry = (coord.y() - GRID_EXTENTS[1]) / dy;
+    let qx = (coord.x() - EXTENTS[0]) / dx;
+    let ry = (coord.y() - EXTENTS[1]) / dy;
 
     let row = ry.round() as i64;
     let col = (qx - (row % 2) as f64).round() as i64;
@@ -33,13 +35,13 @@ pub fn row_col_to_center(row: i64, col: i64, z: u8) -> Result<Point<f64>, N3gbEr
         return Err(N3gbError::InvalidZoomLevel(z));
     }
 
-    let hex_width = CELL_WIDTHS[z as usize];
-    let r = CELL_RADIUS[z as usize];
+    let hex_width = WIDTHS[z as usize];
+    let r = RADIUS[z as usize];
     let dx = hex_width;
     let dy = 1.5 * r;
 
-    let x = GRID_EXTENTS[0] + col as f64 * dx + ((row % 2) as f64 * (dx / 2.0));
-    let y = GRID_EXTENTS[1] + row as f64 * dy;
+    let x = EXTENTS[0] + col as f64 * dx + ((row % 2) as f64 * (dx / 2.0));
+    let y = EXTENTS[1] + row as f64 * dy;
 
     Ok(Point::new(x, y))
 }
