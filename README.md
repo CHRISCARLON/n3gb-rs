@@ -4,88 +4,93 @@ Rust implementation of hex-based spatial indexing for British National Grid.
 
 Inspired by [GDS NUAR n3gb](https://github.com/national-underground-asset-register/n3gb) and [h3o](https://github.com/HydroniumLabs/h3o).
 
-## How It Works
+## Core Structs
 
-**Creating a HexCell:**
-1. `point_to_row_col` — Finds which grid cell coordinates fall into, returns `(row, col)`
-2. `row_col_to_center` — Calculates the exact center of that cell (applying offset for odd rows)
-3. `generate_hex_identifier` — Packs center coordinates + zoom level into a Base64 identifier
+### HexCell
 
-**Reconstructing from ID:**
-1. `decode_hex_identifier` — Decodes Base64 back to version, center_x, center_y, zoom
-2. `create_hexagon` — Draws 6 vertices around the center at the radius for that zoom level (creates the hex cell polygon)
+A single hexagonal cell with a unique ID, center point, and zoom level.
 
-## Usage
-
-### Single HexCells
+**Create one:**
 
 ```rust
 use n3gb_rs::HexCell;
 use geo_types::Point;
 
+// From BNG coordinates
 let point = Point::new(383640.0, 398260.0);
 let cell = HexCell::from_bng(&point, 12)?;
 
-println!("ID: {}", cell.id);
-println!("Center: ({}, {})", cell.easting(), cell.northing());
-
-let polygon = cell.to_polygon();
+// From an existing ID
+let cell = HexCell::from_id("AAF3kQBBMZQM")?;
 ```
 
-### Cell Collections (A Grid of HexCells)
+**What you can do:**
+
+```rust
+cell.id              // Unique Base64 identifier
+cell.easting()       // Center X coordinate
+cell.northing()      // Center Y coordinate
+cell.to_polygon()    // Get the hex as a geo_types Polygon
+```
+
+### HexGrid
+
+A collection of HexCells covering a bounding box.
+
+**Create one:**
 
 ```rust
 use n3gb_rs::HexGrid;
-use geo_types::point;
 
+// Using builder
 let grid = HexGrid::builder()
     .zoom_level(12)
     .bng_extent(&(300000.0, 300000.0), &(350000.0, 350000.0))
     .build();
 
+// Direct construction
+let grid = HexGrid::from_bng_extent(&(300000.0, 300000.0), &(350000.0, 350000.0), 12);
+```
+
+**What you can do:**
+
+```rust
+use geo_types::point;
+
+// Look up a cell by point
 let pt = point! { x: 325000.0, y: 325000.0 };
 if let Some(cell) = grid.get_cell_at(&pt) {
     println!("{}", cell.id);
 }
+
+// Iterate over all cells
+for cell in grid.cells() {
+    println!("{}", cell.id);
+}
+
+// Export to GeoParquet
+grid.to_geoparquet("output.parquet")?;
+
+// Export to Arrow RecordBatch
+let batch = grid.to_record_batch()?;
 ```
 
-### CSV Conversion
+## CSV Conversion
 
-Convert CSV files with geometry columns (WKT or GeoJSON) to hex-indexed CSVs:
+Convert CSV files with geometry columns to hex-indexed CSVs.
+
+I am playing with this as a way to "anonymise" senstive, real world data you want to share without revealing the exact coordinates.
 
 ```rust
 use n3gb_rs::{CsvHexConfig, Crs, csv_to_hex_csv};
 
+// From WKT/GeoJSON geometry column
 let config = CsvHexConfig::new("geometry", 12)
-    .crs(Crs::Wgs84)
-    .exclude(vec!["Geo Point".into()]);
+    .crs(Crs::Wgs84);
 
-csv_to_hex_csv("input.csv", "output.csv", &config)?;
-```
-
-Or with coordinate columns:
-
-```rust
+// From coordinate columns
 let config = CsvHexConfig::from_coords("Easting", "Northing", 12)
     .crs(Crs::Bng);
 
 csv_to_hex_csv("input.csv", "output.csv", &config)?;
-```
-
-Supported geometry types: Point, MultiPoint, LineString, MultiLineString, Polygon, MultiPolygon, GeometryCollection
-
-### Output Formats
-
-Export to GeoParquet or Arrow:
-
-```rust
-use n3gb_rs::{HexGrid, HexCellsToArrow, HexCellsToGeoParquet};
-
-let grid = HexGrid::from_bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0), 10);
-
-// GeoParquet
-grid.to_geoparquet("output.parquet")?;
-
-// Arrow
-let record_batch = grid.to_record_batch()?;
 ```
