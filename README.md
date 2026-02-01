@@ -75,22 +75,114 @@ grid.to_geoparquet("output.parquet")?;
 let batch = grid.to_record_batch()?;
 ```
 
-## CSV Conversion
+## API Reference
 
-Convert CSV files with geometry columns to hex-indexed CSVs.
+For people used to similar hexagonal indexing systems (like H3), here is the mapping to n3gb-rs.
 
-I am playing with this as a way to "anonymise" senstive, real world data you want to share without revealing the exact coordinates.
+### Indexing functions
 
-```rust
-use n3gb_rs::{CsvHexConfig, Crs, csv_to_hex_csv};
+| Concept                  | n3gb-rs                                  |
+| :----------------------- | :--------------------------------------- |
+| Point to cell (BNG)      | `HexCell::from_bng`                      |
+| Point to cell (WGS84)    | `HexCell::from_wgs84`                    |
+| Cell ID to cell          | `HexCell::from_hex_id`                   |
+| Generate cell ID         | `generate_hex_identifier`                |
+| Decode cell ID           | `decode_hex_identifier`                  |
+| Point to row/col         | `point_to_row_col`                       |
+| Row/col to center        | `row_col_to_center`                      |
 
-// From WKT/GeoJSON geometry column
-let config = CsvHexConfig::new("geometry", 12)
-    .crs(Crs::Wgs84);
+### Cell inspection functions
 
-// From coordinate columns
-let config = CsvHexConfig::from_coords("Easting", "Northing", 12)
-    .crs(Crs::Bng);
+| Concept                  | n3gb-rs                                  |
+| :----------------------- | :--------------------------------------- |
+| Get zoom level           | `HexCell::zoom_level`                    |
+| Get cell ID              | `HexCell::id`                            |
+| Get center point         | `HexCell::center`                        |
+| Get easting              | `HexCell::easting`                       |
+| Get northing             | `HexCell::northing`                      |
+| Get row index            | `HexCell::row`                           |
+| Get column index         | `HexCell::col`                           |
+| Cell to polygon          | `HexCell::to_polygon`                    |
 
-csv_to_hex_csv("input.csv", "output.csv", &config)?;
-```
+### Grid functions
+
+| Concept                   | n3gb-rs                                 |
+| :------------------------ | :-------------------------------------- |
+| Grid from extent (BNG)    | `HexGrid::from_bng_extent`              |
+| Grid from extent (WGS84)  | `HexGrid::from_wgs84_extent`            |
+| Grid from rect            | `HexGrid::from_rect`                    |
+| Grid from polygon (BNG)   | `HexGrid::from_bng_polygon`             |
+| Grid from polygon (WGS84) | `HexGrid::from_wgs84_polygon`           |
+| Grid from multipolygon    | `HexGrid::from_bng_multipolygon`        |
+| Grid builder              | `HexGridBuilder`                        |
+| Get cells                 | `HexGrid::cells`                        |
+| Get cell count            | `HexGrid::len`                          |
+| Find cell at point        | `HexGrid::get_cell_at`                  |
+| Filter cells              | `HexGrid::filter`                       |
+| Grid to polygons          | `HexGrid::to_polygons`                  |
+
+### Line coverage functions
+
+| Concept                  | n3gb-rs                                  |
+| :----------------------- | :--------------------------------------- |
+| Line to cells (BNG)      | `HexCell::from_line_string_bng`          |
+| Line to cells (WGS84)    | `HexCell::from_line_string_wgs84`        |
+
+### Coordinate transformation functions
+
+| Concept                   | n3gb-rs                                 |
+| :------------------------ | :-------------------------------------- |
+| WGS84 to BNG point        | `wgs84_to_bng`                          |
+| WGS84 to BNG polygon      | `wgs84_polygon_to_bng`                  |
+| WGS84 to BNG multipolygon | `wgs84_multipolygon_to_bng`             |
+| WGS84 to BNG line         | `wgs84_line_to_bng`                     |
+
+### Hexagon dimension functions
+
+| Concept                    | n3gb-rs                                |
+| :------------------------- | :------------------------------------- |
+| Dims from side length      | `HexagonDims::from_side`               |
+| Dims from circumradius     | `HexagonDims::from_circumradius`       |
+| Dims from apothem          | `HexagonDims::from_apothem`            |
+| Dims from flat-to-flat     | `HexagonDims::from_across_flats`       |
+| Dims from corner-to-corner | `HexagonDims::from_across_corners`     |
+| Dims from area             | `HexagonDims::from_area`               |
+| Bounding box               | `bounding_box`                         |
+
+### Geometry functions
+
+| Concept                  | n3gb-rs                                  |
+| :----------------------- | :--------------------------------------- |
+| Create hex cell polygon  | `create_hexagon` (used in to_polygon)    |
+
+### Arrow/Parquet I/O functions
+
+| Concept                  | n3gb-rs                                  |
+| :----------------------- | :--------------------------------------- |
+| Cell to Arrow points     | `HexCell::to_arrow_points`               |
+| Cell to Arrow polygons   | `HexCell::to_arrow_polygons`             |
+| Cell to RecordBatch      | `HexCell::to_record_batch`               |
+| Cell to GeoParquet       | `HexCell::to_geoparquet`                 |
+| Grid to Arrow points     | `HexGrid::to_arrow_points`               |
+| Grid to Arrow polygons   | `HexGrid::to_arrow_polygons`             |
+| Grid to RecordBatch      | `HexGrid::to_record_batch`               |
+| Grid to GeoParquet       | `HexGrid::to_geoparquet`                 |
+| Write GeoParquet         | `write_geoparquet`                       |
+
+### CSV I/O functions
+
+| Concept                  | n3gb-rs                                  |
+| :----------------------- | :--------------------------------------- |
+| CSV to hex-indexed CSV   | `csv_to_hex_csv`                         |
+| CSV config (geometry)    | `CsvHexConfig::new`                      |
+| CSV config (coords)      | `CsvHexConfig::from_coords`              |
+
+### Constants
+
+| Concept                  | n3gb-rs                                  |
+| :----------------------- | :--------------------------------------- |
+| Max zoom level           | `MAX_ZOOM_LEVEL`                         |
+| Cell radii by zoom       | `CELL_RADIUS`                            |
+| Cell widths by zoom      | `CELL_WIDTHS`                            |
+| Grid extents (BNG)       | `GRID_EXTENTS`                           |
+| Identifier version       | `IDENTIFIER_VERSION`                     |
