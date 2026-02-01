@@ -79,9 +79,9 @@ let batch = grid.to_record_batch()?;
 
 For people used to similar hexagonal indexing systems (like H3), I have started a basic API reference below.
 
-Instead of trying to name things exactly the same, I'am trying to a ensure concept and functionality parity between other H3 libraries that exist.
+Instead of trying to name things exactly the same, I'am trying to  ensure at lest some concept and functionality parity between other H3 libraries that exist.
 
-Work in progress, wont' be perfect
+Work in progress, won't be perfect
 
 ### Indexing functions
 
