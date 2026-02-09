@@ -2,7 +2,7 @@ use crate::cell::HexCell;
 use crate::coord::Crs;
 use crate::error::N3gbError;
 use crate::geom::parse_geometry;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::path::Path;
 
@@ -34,6 +34,7 @@ pub struct CsvHexConfig {
     pub zoom_level: u8,
     pub crs: Crs,
     pub include_hex_geometry: Option<GeometryFormat>,
+    pub hex_density: bool,
 }
 
 impl CsvHexConfig {
@@ -52,6 +53,7 @@ impl CsvHexConfig {
             zoom_level,
             crs: Crs::default(),
             include_hex_geometry: None,
+            hex_density: false,
         }
     }
 
@@ -83,6 +85,7 @@ impl CsvHexConfig {
             zoom_level,
             crs: Crs::default(),
             include_hex_geometry: None,
+            hex_density: false,
         }
     }
 
@@ -99,6 +102,15 @@ impl CsvHexConfig {
     // Include hex polygon geometry in output.
     pub fn with_hex_geometry(mut self, format: GeometryFormat) -> Self {
         self.include_hex_geometry = Some(format);
+        self
+    }
+
+    /// Aggregate output to one row per hex cell with a count of input rows.
+    ///
+    /// Output columns: `hex_id`, `count` (and optionally `hex_geometry`).
+    /// Input attribute columns are dropped since rows are aggregated.
+    pub fn hex_density(mut self) -> Self {
+        self.hex_density = true;
         self
     }
 }
@@ -119,6 +131,101 @@ impl<P: AsRef<Path>> CsvToHex for P {
     ) -> Result<(), N3gbError> {
         csv_to_hex_csv(self, output_path, config)
     }
+}
+
+fn read_cells_from_record(
+    record: &csv::StringRecord,
+    source_indices: &SourceIndices,
+    config: &CsvHexConfig,
+) -> Result<Vec<HexCell>, N3gbError> {
+    match source_indices {
+        SourceIndices::Geometry(idx) => {
+            let geom_str = record.get(*idx).ok_or_else(|| {
+                N3gbError::CsvError(format!("Missing geometry column at index {}", idx))
+            })?;
+            let geom = parse_geometry(geom_str)?;
+            HexCell::from_geometry(geom, config.zoom_level, config.crs)
+        }
+        SourceIndices::Coordinates { x_idx, y_idx } => {
+            let x_str = record
+                .get(*x_idx)
+                .ok_or_else(|| N3gbError::CsvError(format!("Missing X column at index {}", x_idx)))?
+                .trim();
+            let y_str = record
+                .get(*y_idx)
+                .ok_or_else(|| N3gbError::CsvError(format!("Missing Y column at index {}", y_idx)))?
+                .trim();
+
+            let x: f64 = x_str
+                .parse()
+                .map_err(|_| N3gbError::CsvError(format!("Invalid X coordinate: '{}'", x_str)))?;
+            let y: f64 = y_str
+                .parse()
+                .map_err(|_| N3gbError::CsvError(format!("Invalid Y coordinate: '{}'", y_str)))?;
+
+            let cell = match config.crs {
+                Crs::Wgs84 => HexCell::from_wgs84(&(x, y), config.zoom_level)?,
+                Crs::Bng => HexCell::from_bng(&(x, y), config.zoom_level)?,
+            };
+            Ok(vec![cell])
+        }
+    }
+}
+
+fn csv_to_hex_density(
+    mut reader: csv::Reader<File>,
+    source_indices: SourceIndices,
+    output_path: impl AsRef<Path>,
+    config: &CsvHexConfig,
+) -> Result<(), N3gbError> {
+    let mut counts: HashMap<String, usize> = HashMap::new();
+
+    for result in reader.records() {
+        let record = result.map_err(|e| N3gbError::CsvError(e.to_string()))?;
+        let cells = read_cells_from_record(&record, &source_indices, config)?;
+
+        for cell in cells {
+            *counts.entry(cell.id).or_insert(0) += 1;
+        }
+    }
+
+    let mut sorted: Vec<_> = counts.into_iter().collect();
+    sorted.sort_by(|a, b| b.1.cmp(&a.1));
+
+    let out_file = File::create(output_path).map_err(|e| N3gbError::IoError(e.to_string()))?;
+    let mut writer = csv::Writer::from_writer(out_file);
+
+    let mut header_row: Vec<&str> = vec!["hex_id", "count"];
+    if config.include_hex_geometry.is_some() {
+        header_row.push("hex_geometry");
+    }
+    writer
+        .write_record(&header_row)
+        .map_err(|e| N3gbError::CsvError(e.to_string()))?;
+
+    for (hex_id, count) in &sorted {
+        let mut row: Vec<String> = vec![hex_id.clone(), count.to_string()];
+
+        if let Some(format) = config.include_hex_geometry {
+            let cell = HexCell::from_hex_id(hex_id)?;
+            let polygon = cell.to_polygon();
+            let geom_str = match format {
+                GeometryFormat::Wkt => polygon_to_wkt(&polygon),
+                GeometryFormat::GeoJson => polygon_to_geojson(&polygon),
+            };
+            row.push(geom_str);
+        }
+
+        writer
+            .write_record(&row)
+            .map_err(|e| N3gbError::CsvError(e.to_string()))?;
+    }
+
+    writer
+        .flush()
+        .map_err(|e| N3gbError::CsvError(e.to_string()))?;
+
+    Ok(())
 }
 
 fn polygon_to_wkt(polygon: &geo_types::Polygon<f64>) -> String {
@@ -218,6 +325,10 @@ pub fn csv_to_hex_csv(
         }
     }
 
+    if config.hex_density {
+        return csv_to_hex_density(reader, source_indices, output_path, config);
+    }
+
     let out_file = File::create(output_path).map_err(|e| N3gbError::IoError(e.to_string()))?;
     let mut writer = csv::Writer::from_writer(out_file);
 
@@ -237,43 +348,7 @@ pub fn csv_to_hex_csv(
     for result in reader.records() {
         let record = result.map_err(|e| N3gbError::CsvError(e.to_string()))?;
 
-        let cells = match &source_indices {
-            SourceIndices::Geometry(idx) => {
-                let geom_str = record.get(*idx).ok_or_else(|| {
-                    N3gbError::CsvError(format!("Missing geometry column at index {}", idx))
-                })?;
-                let geom = parse_geometry(geom_str)?;
-                HexCell::from_geometry(geom, config.zoom_level, config.crs)?
-            }
-            SourceIndices::Coordinates { x_idx, y_idx } => {
-                let x_str = record
-                    .get(*x_idx)
-                    .ok_or_else(|| {
-                        N3gbError::CsvError(format!("Missing X column at index {}", x_idx))
-                    })?
-                    .trim();
-                let y_str = record
-                    .get(*y_idx)
-                    .ok_or_else(|| {
-                        N3gbError::CsvError(format!("Missing Y column at index {}", y_idx))
-                    })?
-                    .trim();
-
-                let x: f64 = x_str.parse().map_err(|_| {
-                    N3gbError::CsvError(format!("Invalid X coordinate: '{}'", x_str))
-                })?;
-                let y: f64 = y_str.parse().map_err(|_| {
-                    N3gbError::CsvError(format!("Invalid Y coordinate: '{}'", y_str))
-                })?;
-
-                // TODO: Could replace with from geometry call?
-                let cell = match config.crs {
-                    Crs::Wgs84 => HexCell::from_wgs84(&(x, y), config.zoom_level)?,
-                    Crs::Bng => HexCell::from_bng(&(x, y), config.zoom_level)?,
-                };
-                vec![cell]
-            }
-        };
+        let cells = read_cells_from_record(&record, &source_indices, config)?;
 
         for cell in cells {
             let mut row: Vec<String> = vec![cell.id.clone()];
@@ -377,6 +452,45 @@ mod tests {
         assert!(output.contains("Name"));
         assert!(!output.contains(",Easting,"));
         assert!(!output.contains(",Northing"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_csv_hex_density() -> Result<(), N3gbError> {
+        let dir = tempdir().map_err(|e| N3gbError::IoError(e.to_string()))?;
+        let csv_path = dir.path().join("test.csv");
+        let output_path = dir.path().join("output.csv");
+
+        let mut file = File::create(&csv_path).map_err(|e| N3gbError::IoError(e.to_string()))?;
+        writeln!(file, "StopCode,Name,Easting,Northing")
+            .map_err(|e| N3gbError::IoError(e.to_string()))?;
+
+        writeln!(file, "ABC123,Stop A,359581,172304")
+            .map_err(|e| N3gbError::IoError(e.to_string()))?;
+        writeln!(file, "DEF456,Stop B,359582,172305")
+            .map_err(|e| N3gbError::IoError(e.to_string()))?;
+
+        writeln!(file, "GHI789,Stop C,350000,170000")
+            .map_err(|e| N3gbError::IoError(e.to_string()))?;
+
+        let config = CsvHexConfig::from_coords("Easting", "Northing", 12)
+            .crs(Crs::Bng)
+            .hex_density();
+        csv_to_hex_csv(&csv_path, &output_path, &config)?;
+
+        let output =
+            std::fs::read_to_string(&output_path).map_err(|e| N3gbError::IoError(e.to_string()))?;
+        let lines: Vec<&str> = output.lines().collect();
+
+        assert_eq!(lines[0], "hex_id,count");
+        assert_eq!(lines.len(), 3);
+
+        assert!(lines[1].ends_with(",2"));
+        assert!(lines[2].ends_with(",1"));
+
+        assert!(!output.contains("StopCode"));
+        assert!(!output.contains("Name"));
 
         Ok(())
     }

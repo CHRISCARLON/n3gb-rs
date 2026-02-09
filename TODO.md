@@ -35,4 +35,4 @@ There's probably 2 main paths to consider for the IO stuff...
 - When you want to output one row, per hex id, with an aggregated count of things
 
 ^^^ Different use cases, 2nd one pre-computes the work required for hex density maps etc
-Maybe we only focus on the 1st for this lib for now.
+Maybe we only focus on the 1st for this lib for now or we create a seperate density module later
