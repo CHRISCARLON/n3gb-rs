@@ -1,27 +1,14 @@
 use crate::cell::HexCell;
+use crate::coord::Crs;
 use crate::error::N3gbError;
-use geo::Centroid;
-use geo_types::Geometry;
-use geojson::GeoJson;
+use crate::geom::parse_geometry;
 use std::collections::HashSet;
 use std::fs::File;
 use std::path::Path;
-use std::str::FromStr;
-use wkt::Wkt;
 
 enum SourceIndices {
     Geometry(usize),
     Coordinates { x_idx: usize, y_idx: usize },
-}
-
-/// Coordinate reference system for input geometry data.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Crs {
-    /// WGS84 (EPSG:4326) - longitude/latitude coordinates
-    #[default]
-    Wgs84,
-    /// British National Grid (EPSG:27700) - easting/northing coordinates
-    Bng,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -134,44 +121,6 @@ impl<P: AsRef<Path>> CsvToHex for P {
     }
 }
 
-fn parse_geometry(s: &str) -> Result<Geometry<f64>, N3gbError> {
-    let trimmed = s.trim();
-    if trimmed.starts_with('{') {
-        parse_geojson(trimmed)
-    } else {
-        parse_wkt(trimmed)
-    }
-}
-
-fn parse_geojson(s: &str) -> Result<Geometry<f64>, N3gbError> {
-    let geojson: GeoJson = s
-        .parse()
-        .map_err(|e: geojson::Error| N3gbError::GeometryParseError(e.to_string()))?;
-
-    match geojson {
-        GeoJson::Geometry(geom) => {
-            Geometry::try_from(geom).map_err(|e| N3gbError::GeometryParseError(e.to_string()))
-        }
-        GeoJson::Feature(feat) => feat
-            .geometry
-            .ok_or_else(|| N3gbError::GeometryParseError("Feature has no geometry".to_string()))
-            .and_then(|g| {
-                Geometry::try_from(g).map_err(|e| N3gbError::GeometryParseError(e.to_string()))
-            }),
-        GeoJson::FeatureCollection(_) => Err(N3gbError::GeometryParseError(
-            "FeatureCollection not supported, use individual geometries".to_string(),
-        )),
-    }
-}
-
-fn parse_wkt(s: &str) -> Result<Geometry<f64>, N3gbError> {
-    let wkt: Wkt<f64> =
-        Wkt::from_str(s).map_err(|e| N3gbError::GeometryParseError(e.to_string()))?;
-
-    wkt.try_into()
-        .map_err(|_| N3gbError::GeometryParseError("Failed to convert WKT to geometry".to_string()))
-}
-
 fn polygon_to_wkt(polygon: &geo_types::Polygon<f64>) -> String {
     use wkt::ToWkt;
     polygon.wkt_string()
@@ -180,82 +129,6 @@ fn polygon_to_wkt(polygon: &geo_types::Polygon<f64>) -> String {
 fn polygon_to_geojson(polygon: &geo_types::Polygon<f64>) -> String {
     let geom = geojson::Geometry::from(polygon);
     geom.to_string()
-}
-
-fn geometry_to_hex_cells(
-    geom: Geometry<f64>,
-    zoom: u8,
-    crs: Crs,
-) -> Result<Vec<HexCell>, N3gbError> {
-    match geom {
-        Geometry::Point(pt) => {
-            let cell = match crs {
-                Crs::Wgs84 => HexCell::from_wgs84(&pt, zoom)?,
-                Crs::Bng => HexCell::from_bng(&pt, zoom)?,
-            };
-            Ok(vec![cell])
-        }
-        Geometry::LineString(line) => match crs {
-            Crs::Wgs84 => HexCell::from_line_string_wgs84(&line, zoom),
-            Crs::Bng => HexCell::from_line_string_bng(&line, zoom),
-        },
-        Geometry::MultiLineString(mls) => {
-            let mut all_cells = Vec::new();
-            for line in mls.0 {
-                let cells = match crs {
-                    Crs::Wgs84 => HexCell::from_line_string_wgs84(&line, zoom)?,
-                    Crs::Bng => HexCell::from_line_string_bng(&line, zoom)?,
-                };
-                all_cells.extend(cells);
-            }
-            Ok(all_cells)
-        }
-        Geometry::Polygon(poly) => {
-            if let Some(centroid) = poly.centroid() {
-                let cell = match crs {
-                    Crs::Wgs84 => HexCell::from_wgs84(&centroid, zoom)?,
-                    Crs::Bng => HexCell::from_bng(&centroid, zoom)?,
-                };
-                Ok(vec![cell])
-            } else {
-                Ok(vec![])
-            }
-        }
-        Geometry::MultiPolygon(mp) => {
-            let mut cells = Vec::new();
-            for poly in mp.0 {
-                if let Some(centroid) = poly.centroid() {
-                    let cell = match crs {
-                        Crs::Wgs84 => HexCell::from_wgs84(&centroid, zoom)?,
-                        Crs::Bng => HexCell::from_bng(&centroid, zoom)?,
-                    };
-                    cells.push(cell);
-                }
-            }
-            Ok(cells)
-        }
-        Geometry::MultiPoint(mp) => {
-            let mut cells = Vec::new();
-            for pt in mp.0 {
-                let cell = match crs {
-                    Crs::Wgs84 => HexCell::from_wgs84(&pt, zoom)?,
-                    Crs::Bng => HexCell::from_bng(&pt, zoom)?,
-                };
-                cells.push(cell);
-            }
-            Ok(cells)
-        }
-        Geometry::GeometryCollection(gc) => {
-            let mut all_cells = Vec::new();
-            for g in gc.0 {
-                all_cells.extend(geometry_to_hex_cells(g, zoom, crs)?);
-            }
-            Ok(all_cells)
-        }
-        _ => Err(N3gbError::GeometryParseError(
-            "Unsupported geometry type".to_string(),
-        )),
-    }
 }
 
 /// Converts a CSV file with geometry or coordinate columns to a CSV file with hex IDs.
@@ -300,10 +173,14 @@ pub fn csv_to_hex_csv(
 
     // Determine which columns to exclude based on source type
     // Best practice is to always exclude ANY geometry column
-    // TODO: Do this by default or throw and error when not?
     let (source_indices, mut exclude_indices) =
         match &config.source {
             CoordinateSource::GeometryColumn(col) => {
+                if col.is_empty() {
+                    return Err(N3gbError::CsvError(
+                        "Geometry column name cannot be empty".to_string(),
+                    ));
+                }
                 let idx = headers.iter().position(|h| h == col).ok_or_else(|| {
                     N3gbError::CsvError(format!("Geometry column '{}' not found", col))
                 })?;
@@ -312,6 +189,16 @@ pub fn csv_to_hex_csv(
                 (SourceIndices::Geometry(idx), exclude)
             }
             CoordinateSource::CoordinateColumns { x_column, y_column } => {
+                if x_column.is_empty() {
+                    return Err(N3gbError::CsvError(
+                        "X column name cannot be empty".to_string(),
+                    ));
+                }
+                if y_column.is_empty() {
+                    return Err(N3gbError::CsvError(
+                        "Y column name cannot be empty".to_string(),
+                    ));
+                }
                 let x_idx = headers.iter().position(|h| h == x_column).ok_or_else(|| {
                     N3gbError::CsvError(format!("X column '{}' not found", x_column))
                 })?;
@@ -356,7 +243,7 @@ pub fn csv_to_hex_csv(
                     N3gbError::CsvError(format!("Missing geometry column at index {}", idx))
                 })?;
                 let geom = parse_geometry(geom_str)?;
-                geometry_to_hex_cells(geom, config.zoom_level, config.crs)?
+                HexCell::from_geometry(geom, config.zoom_level, config.crs)?
             }
             SourceIndices::Coordinates { x_idx, y_idx } => {
                 let x_str = record
@@ -379,6 +266,7 @@ pub fn csv_to_hex_csv(
                     N3gbError::CsvError(format!("Invalid Y coordinate: '{}'", y_str))
                 })?;
 
+                // TODO: Could replace with from geometry call?
                 let cell = match config.crs {
                     Crs::Wgs84 => HexCell::from_wgs84(&(x, y), config.zoom_level)?,
                     Crs::Bng => HexCell::from_bng(&(x, y), config.zoom_level)?,
@@ -424,73 +312,6 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
-    fn test_parse_geojson_point() -> Result<(), N3gbError> {
-        let json = r#"{"type":"Point","coordinates":[-0.1,51.5]}"#;
-        let geom = parse_geometry(json)?;
-        match geom {
-            Geometry::Point(pt) => {
-                assert!((pt.x() - (-0.1)).abs() < 0.001);
-                assert!((pt.y() - 51.5).abs() < 0.001);
-            }
-            _ => panic!("Expected Point"),
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn test_parse_geojson_linestring() -> Result<(), N3gbError> {
-        let json = r#"{"type":"LineString","coordinates":[[-0.1,51.5],[-0.2,51.6]]}"#;
-        let geom = parse_geometry(json)?;
-        match geom {
-            Geometry::LineString(line) => {
-                assert_eq!(line.0.len(), 2);
-            }
-            _ => panic!("Expected LineString"),
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn test_parse_geojson_multilinestring() -> Result<(), N3gbError> {
-        let json = r#"{"type":"MultiLineString","coordinates":[[[-0.1,51.5],[-0.2,51.6]],[[-0.3,51.7],[-0.4,51.8]]]}"#;
-        let geom = parse_geometry(json)?;
-        match geom {
-            Geometry::MultiLineString(mls) => {
-                assert_eq!(mls.0.len(), 2);
-            }
-            _ => panic!("Expected MultiLineString"),
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn test_parse_wkt_point() -> Result<(), N3gbError> {
-        let wkt = "POINT(-0.1 51.5)";
-        let geom = parse_geometry(wkt)?;
-        match geom {
-            Geometry::Point(pt) => {
-                assert!((pt.x() - (-0.1)).abs() < 0.001);
-                assert!((pt.y() - 51.5).abs() < 0.001);
-            }
-            _ => panic!("Expected Point"),
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn test_parse_wkt_linestring() -> Result<(), N3gbError> {
-        let wkt = "LINESTRING(-0.1 51.5, -0.2 51.6)";
-        let geom = parse_geometry(wkt)?;
-        match geom {
-            Geometry::LineString(line) => {
-                assert_eq!(line.0.len(), 2);
-            }
-            _ => panic!("Expected LineString"),
-        }
-        Ok(())
-    }
-
-    #[test]
     fn test_csv_to_hex_csv_wgs84() -> Result<(), N3gbError> {
         let dir = tempdir().map_err(|e| N3gbError::IoError(e.to_string()))?;
         let csv_path = dir.path().join("test.csv");
@@ -528,11 +349,6 @@ mod tests {
 
         assert!(output_path.exists());
         Ok(())
-    }
-
-    #[test]
-    fn test_crs_enum_default() {
-        assert_eq!(Crs::default(), Crs::Wgs84);
     }
 
     #[test]

@@ -6,6 +6,16 @@ pub use bng_transformations::{
 
 use geo_types::Point;
 
+/// Coordinate reference system for input geometry data.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Crs {
+    /// WGS84 (EPSG:4326) - longitude/latitude coordinates
+    #[default]
+    Wgs84,
+    /// British National Grid (EPSG:27700) - easting/northing coordinates
+    Bng,
+}
+
 /// Trait for types that can provide x/y coordinates.
 ///
 /// Implemented for `(f64, f64)` tuples and `geo_types::Point<f64>`.
@@ -51,5 +61,10 @@ mod tests {
         let point = Point::new(100.0, 200.0);
         assert_eq!(point.x(), 100.0);
         assert_eq!(point.y(), 200.0);
+    }
+
+    #[test]
+    fn test_crs_enum_default() {
+        assert_eq!(Crs::default(), Crs::Wgs84);
     }
 }

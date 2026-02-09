@@ -87,6 +87,7 @@
 //! | :----------------------- | :--------------------------------------- |
 //! | Point to cell (BNG)      | `HexCell::from_bng`                      |
 //! | Point to cell (WGS84)    | `HexCell::from_wgs84`                    |
+//! | Geometry to cells        | `HexCell::from_geometry`                 |
 //! | Cell ID to cell          | `HexCell::from_hex_id`                   |
 //! | Generate cell ID         | `generate_hex_identifier`                |
 //! | Decode cell ID           | `decode_hex_identifier`                  |
@@ -156,6 +157,7 @@
 //! | Concept                  | n3gb-rs                                  |
 //! | :----------------------- | :--------------------------------------- |
 //! | Create hex cell polygon  | `create_hexagon` (used in to_polygon)    |
+//! | Parse WKT/GeoJSON        | `parse_geometry`                         |
 //!
 //! ### Arrow/Parquet I/O functions
 //!
@@ -200,7 +202,8 @@ mod io;
 
 pub use cell::HexCell;
 pub use coord::{
-    Coordinate, wgs84_line_to_bng, wgs84_multipolygon_to_bng, wgs84_polygon_to_bng, wgs84_to_bng,
+    Coordinate, Crs, wgs84_line_to_bng, wgs84_multipolygon_to_bng, wgs84_polygon_to_bng,
+    wgs84_to_bng,
 };
 pub use dimensions::{
     HexagonDims, bounding_box, from_across_corners, from_across_flats, from_apothem, from_area,
@@ -213,11 +216,11 @@ pub use index::{
     decode_hex_identifier, generate_hex_identifier, point_to_row_col, row_col_to_center,
 };
 pub use io::{
-    CoordinateSource, Crs, CsvHexConfig, CsvToHex, GeometryFormat, HexCellsToArrow,
+    CoordinateSource, CsvHexConfig, CsvToHex, GeometryFormat, HexCellsToArrow,
     HexCellsToGeoParquet, csv_to_hex_csv, write_geoparquet,
 };
 
-pub use geom::create_hexagon;
+pub use geom::{create_hexagon, parse_geometry};
 
 pub use geo_types;
 pub use geoarrow_array;
