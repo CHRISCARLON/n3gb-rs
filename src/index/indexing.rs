@@ -22,7 +22,7 @@ pub fn point_to_row_col<C: Coordinate>(coord: &C, z: u8) -> Result<(i64, i64), N
     let ry = (coord.y() - EXTENTS[1]) / dy;
 
     let row = ry.round() as i64;
-    let col = (qx - (row % 2) as f64).round() as i64;
+    let col = (qx - row.rem_euclid(2) as f64).round() as i64;
 
     Ok((row, col))
 }

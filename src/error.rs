@@ -41,3 +41,27 @@ impl std::fmt::Display for N3gbError {
 }
 
 impl std::error::Error for N3gbError {}
+
+impl From<std::io::Error> for N3gbError {
+    fn from(e: std::io::Error) -> Self {
+        N3gbError::IoError(e.to_string())
+    }
+}
+
+impl From<csv::Error> for N3gbError {
+    fn from(e: csv::Error) -> Self {
+        N3gbError::CsvError(e.to_string())
+    }
+}
+
+impl From<arrow_schema::ArrowError> for N3gbError {
+    fn from(e: arrow_schema::ArrowError) -> Self {
+        N3gbError::IoError(e.to_string())
+    }
+}
+
+impl From<parquet::errors::ParquetError> for N3gbError {
+    fn from(e: parquet::errors::ParquetError) -> Self {
+        N3gbError::IoError(e.to_string())
+    }
+}

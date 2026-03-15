@@ -21,7 +21,7 @@ let point = Point::new(383640.0, 398260.0);
 let cell = HexCell::from_bng(&point, 12)?;
 
 // From an existing ID
-let cell = HexCell::from_id("AAF3kQBBMZQM")?;
+let cell = HexCell::from_hex_id("AAF3kQBBMZQM")?;
 ```
 
 **What you can do:**
@@ -46,10 +46,10 @@ use n3gb_rs::HexGrid;
 let grid = HexGrid::builder()
     .zoom_level(12)
     .bng_extent(&(300000.0, 300000.0), &(350000.0, 350000.0))
-    .build();
+    .build()?;
 
 // Direct construction
-let grid = HexGrid::from_bng_extent(&(300000.0, 300000.0), &(350000.0, 350000.0), 12);
+let grid = HexGrid::from_bng_extent(&(300000.0, 300000.0), &(350000.0, 350000.0), 12)?;
 ```
 
 **What you can do:**
@@ -77,11 +77,11 @@ let batch = grid.to_record_batch()?;
 
 ## API Reference
 
-For people used to similar hexagonal indexing systems (like H3), I have started a basic API reference below.
+For people used to similar hexagonal indexing systems (like H3), here is a basic API reference.
 
-Instead of trying to name things exactly the same, I'am trying to  ensure at lest some concept and functionality parity between other H3 libraries that exist.
+Instead of trying to name things exactly the same, I'm trying to ensure some concept and functionality parity between other H3 libraries that exist.
 
-Work in progress, won't be perfect
+Work in progress, it won't be perfect.
 
 ### Indexing functions
 
@@ -89,6 +89,7 @@ Work in progress, won't be perfect
 | :----------------------- | :--------------------------------------- |
 | Point to cell (BNG)      | `HexCell::from_bng`                      |
 | Point to cell (WGS84)    | `HexCell::from_wgs84`                    |
+| Geometry to cells         | `HexCell::from_geometry`                |
 | Cell ID to cell          | `HexCell::from_hex_id`                   |
 | Generate cell ID         | `generate_hex_identifier`                |
 | Decode cell ID           | `decode_hex_identifier`                  |
@@ -145,12 +146,12 @@ Work in progress, won't be perfect
 
 | Concept                    | n3gb-rs                                |
 | :------------------------- | :------------------------------------- |
-| Dims from side length      | `HexagonDims::from_side`               |
-| Dims from circumradius     | `HexagonDims::from_circumradius`       |
-| Dims from apothem          | `HexagonDims::from_apothem`            |
-| Dims from flat-to-flat     | `HexagonDims::from_across_flats`       |
-| Dims from corner-to-corner | `HexagonDims::from_across_corners`     |
-| Dims from area             | `HexagonDims::from_area`               |
+| Dims from side length      | `from_side`                            |
+| Dims from circumradius     | `from_circumradius`                    |
+| Dims from apothem          | `from_apothem`                         |
+| Dims from flat-to-flat     | `from_across_flats`                    |
+| Dims from corner-to-corner | `from_across_corners`                  |
+| Dims from area             | `from_area`                            |
 | Bounding box               | `bounding_box`                         |
 
 ### Geometry functions
@@ -158,6 +159,7 @@ Work in progress, won't be perfect
 | Concept                  | n3gb-rs                                  |
 | :----------------------- | :--------------------------------------- |
 | Create hex cell polygon  | `create_hexagon` (used in to_polygon)    |
+| Parse WKT/GeoJSON        | `parse_geometry`                         |
 
 ### Arrow/Parquet I/O functions
 

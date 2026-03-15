@@ -86,10 +86,13 @@ impl HexCell {
         })
     }
 
-    /// Create HexCells from  a LineString in BNG coordinates.
+    /// Create HexCells from a LineString in BNG coordinates.
     ///
     /// Samples points along the line and returns all unique cells that intersect it.
     pub fn from_line_string_bng(line: &LineString, zoom: u8) -> Result<Vec<Self>, N3gbError> {
+        if zoom > crate::index::MAX_ZOOM_LEVEL {
+            return Err(N3gbError::InvalidZoomLevel(zoom));
+        }
         let cell_radius = CELL_RADIUS[zoom as usize];
         let step_size = cell_radius * 0.5;
 

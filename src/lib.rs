@@ -42,14 +42,17 @@
 //! ```
 //! use n3gb_rs::HexGrid;
 //!
+//! # fn main() -> Result<(), n3gb_rs::N3gbError> {
 //! // Using builder
 //! let grid = HexGrid::builder()
 //!     .zoom_level(12)
 //!     .bng_extent(&(300000.0, 300000.0), &(350000.0, 350000.0))
-//!     .build();
+//!     .build()?;
 //!
 //! // Direct construction
-//! let grid = HexGrid::from_bng_extent(&(300000.0, 300000.0), &(350000.0, 350000.0), 12);
+//! let grid = HexGrid::from_bng_extent(&(300000.0, 300000.0), &(350000.0, 350000.0), 12)?;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! **What you can do:**
@@ -58,7 +61,7 @@
 //! use n3gb_rs::HexGrid;
 //! use geo_types::point;
 //!
-//! # let grid = HexGrid::from_bng_extent(&(300000.0, 300000.0), &(350000.0, 350000.0), 12);
+//! # let grid = HexGrid::from_bng_extent(&(300000.0, 300000.0), &(350000.0, 350000.0), 12).unwrap();
 //! // Look up a cell by point
 //! let pt = point! { x: 325000.0, y: 325000.0 };
 //! if let Some(cell) = grid.get_cell_at(&pt) {
@@ -237,7 +240,7 @@ mod tests {
         let grid = HexGrid::builder()
             .zoom_level(10)
             .bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0))
-            .build();
+            .build()?;
 
         assert!(!grid.is_empty());
         assert_eq!(grid.zoom_level(), 10);
@@ -268,7 +271,7 @@ mod tests {
             coord! { x: 457000.0, y: 339500.0 },
             coord! { x: 458000.0, y: 340500.0 },
         );
-        let grid = HexGrid::from_rect(&rect, 10);
+        let grid = HexGrid::from_rect(&rect, 10)?;
         assert!(!grid.is_empty());
         Ok(())
     }
@@ -286,8 +289,8 @@ mod tests {
     }
 
     #[test]
-    fn test_grid_iteration() {
-        let grid = HexGrid::from_bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0), 10);
+    fn test_grid_iteration() -> Result<(), N3gbError> {
+        let grid = HexGrid::from_bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0), 10)?;
 
         let mut count = 0;
         for cell in grid.iter() {
@@ -296,15 +299,17 @@ mod tests {
         }
 
         assert_eq!(count, grid.len());
+        Ok(())
     }
 
     #[test]
-    fn test_grid_filtering() {
-        let grid = HexGrid::from_bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0), 10);
+    fn test_grid_filtering() -> Result<(), N3gbError> {
+        let grid = HexGrid::from_bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0), 10)?;
 
         let high_easting = grid.filter(|cell| cell.easting() > 457500.0);
         assert!(!high_easting.is_empty());
         assert!(high_easting.len() < grid.len());
+        Ok(())
     }
 
     #[test]
@@ -336,7 +341,7 @@ mod tests {
     fn test_hexcell_consistency_with_hexgrid() -> Result<(), N3gbError> {
         let cell_direct = HexCell::from_bng(&(457500.0, 340000.0), 10)?;
 
-        let grid = HexGrid::from_bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0), 10);
+        let grid = HexGrid::from_bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0), 10)?;
         let pt = point! { x: 457500.0, y: 340000.0 };
         let cell_from_grid = grid.get_cell_at(&pt);
 

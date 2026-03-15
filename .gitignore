@@ -22,5 +22,5 @@ target
 
 # Other
 *.parquet
-main.rs
 PROJECT_MAP.md
+.claude

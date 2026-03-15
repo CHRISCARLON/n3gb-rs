@@ -1,7 +1,7 @@
 use crate::error::N3gbError;
 use crate::index::constants::{IDENTIFIER_VERSION, SCALE_FACTOR};
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
 /// Generates a unique hex cell identifier from BNG coordinates and zoom level.
 ///
@@ -39,16 +39,14 @@ pub fn generate_hex_identifier(easting: f64, northing: f64, zoom_level: u8) -> S
     let easting_int = (easting * SCALE_FACTOR as f64).round() as u64;
     let northing_int = (northing * SCALE_FACTOR as f64).round() as u64;
 
-    let mut binary_data = Vec::with_capacity(18);
-    binary_data.push(IDENTIFIER_VERSION);
-    binary_data.extend_from_slice(&easting_int.to_be_bytes());
-    binary_data.extend_from_slice(&northing_int.to_be_bytes());
-    binary_data.push(zoom_level);
+    let mut buf = [0u8; 19];
+    buf[0] = IDENTIFIER_VERSION;
+    buf[1..9].copy_from_slice(&easting_int.to_be_bytes());
+    buf[9..17].copy_from_slice(&northing_int.to_be_bytes());
+    buf[17] = zoom_level;
+    buf[18] = buf[..18].iter().fold(0u8, |acc, &b| acc.wrapping_add(b));
 
-    let checksum: u8 = binary_data.iter().fold(0u8, |acc, &b| acc.wrapping_add(b));
-    binary_data.push(checksum);
-
-    URL_SAFE_NO_PAD.encode(&binary_data)
+    URL_SAFE_NO_PAD.encode(buf)
 }
 
 /// Decodes a hex cell identifier back to its component parts.

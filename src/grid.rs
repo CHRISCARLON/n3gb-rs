@@ -1,9 +1,7 @@
 use crate::cell::HexCell;
 use crate::coord::{Coordinate, wgs84_multipolygon_to_bng, wgs84_polygon_to_bng, wgs84_to_bng};
 use crate::error::N3gbError;
-use crate::index::{
-    GRID_EXTENTS, MAX_ZOOM_LEVEL, generate_hex_identifier, point_to_row_col, row_col_to_center,
-};
+use crate::index::{GRID_EXTENTS, generate_hex_identifier, point_to_row_col, row_col_to_center};
 use crate::io::arrow::HexCellsToArrow;
 use crate::io::parquet::HexCellsToGeoParquet;
 use arrow_array::RecordBatch;
@@ -11,6 +9,7 @@ use geo::{BoundingRect, Intersects};
 use geo_types::{MultiPolygon, Point, Polygon, Rect};
 use geoarrow_array::array::{PointArray, PolygonArray};
 use rayon::prelude::*;
+use std::collections::HashMap;
 use std::path::Path;
 
 /// A collection of hexagonal cells covering a geographic extent.
@@ -27,11 +26,12 @@ use std::path::Path;
 /// use n3gb_rs::HexGrid;
 /// use geo_types::point;
 ///
+/// # fn main() -> Result<(), n3gb_rs::N3gbError> {
 /// // Create a grid covering an area
 /// let grid = HexGrid::builder()
 ///     .zoom_level(10)
 ///     .bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0))
-///     .build();
+///     .build()?;
 ///
 /// println!("Grid contains {} cells", grid.len());
 ///
@@ -40,27 +40,50 @@ use std::path::Path;
 /// if let Some(cell) = grid.get_cell_at(&pt) {
 ///     println!("Point is in cell: {}", cell.id);
 /// }
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug, Clone)]
 pub struct HexGrid {
     cells: Vec<HexCell>,
+    index: HashMap<(i64, i64), usize>,
     zoom_level: u8,
 }
 
 impl HexGrid {
+    /// Build a `HexGrid` from a vec of cells, constructing the spatial index.
+    fn new(cells: Vec<HexCell>, zoom_level: u8) -> Self {
+        let index = cells
+            .iter()
+            .enumerate()
+            .map(|(i, cell)| ((cell.row, cell.col), i))
+            .collect();
+        Self {
+            cells,
+            index,
+            zoom_level,
+        }
+    }
+
     /// Creates a new [`HexGridBuilder`] for grid construction.
     pub fn builder() -> HexGridBuilder {
         HexGridBuilder::new()
     }
 
-    /// Add in a bounding box extent
-    fn from_extent(min_x: f64, min_y: f64, max_x: f64, max_y: f64, zoom_level: u8) -> Self {
-        let cells = generate_cells_for_extent(min_x, min_y, max_x, max_y, zoom_level);
-        Self { cells, zoom_level }
+    /// Build a grid from a bounding box extent.
+    fn from_extent(
+        min_x: f64,
+        min_y: f64,
+        max_x: f64,
+        max_y: f64,
+        zoom_level: u8,
+    ) -> Result<Self, N3gbError> {
+        let cells = generate_cells_for_extent(min_x, min_y, max_x, max_y, zoom_level)?;
+        Ok(Self::new(cells, zoom_level))
     }
 
     /// Creates a HexGrid from a `geo_types::Rect` in BNG coordinates.
-    pub fn from_rect(rect: &Rect<f64>, zoom_level: u8) -> Self {
+    pub fn from_rect(rect: &Rect<f64>, zoom_level: u8) -> Result<Self, N3gbError> {
         Self::from_extent(
             rect.min().x,
             rect.min().y,
@@ -77,16 +100,23 @@ impl HexGrid {
     /// use n3gb_rs::HexGrid;
     /// use geo_types::Point;
     ///
+    /// # fn main() -> Result<(), n3gb_rs::N3gbError> {
     /// // From tuples
-    /// let grid = HexGrid::from_bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0), 10);
+    /// let grid = HexGrid::from_bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0), 10)?;
     /// // From Points
     /// let grid = HexGrid::from_bng_extent(
     ///     &Point::new(457000.0, 339500.0),
     ///     &Point::new(458000.0, 340500.0),
     ///     10
-    /// );
+    /// )?;
+    /// # Ok(())
+    /// # }
     /// ```
-    pub fn from_bng_extent(min: &impl Coordinate, max: &impl Coordinate, zoom_level: u8) -> Self {
+    pub fn from_bng_extent(
+        min: &impl Coordinate,
+        max: &impl Coordinate,
+        zoom_level: u8,
+    ) -> Result<Self, N3gbError> {
         Self::from_extent(min.x(), min.y(), max.x(), max.y(), zoom_level)
     }
 
@@ -116,13 +146,13 @@ impl HexGrid {
     ) -> Result<Self, N3gbError> {
         let min_bng = wgs84_to_bng(min)?;
         let max_bng = wgs84_to_bng(max)?;
-        Ok(Self::from_extent(
+        Self::from_extent(
             min_bng.x(),
             min_bng.y(),
             max_bng.x(),
             max_bng.y(),
             zoom_level,
-        ))
+        )
     }
 
     /// Creates a HexGrid from a polygon in BNG coordinates.
@@ -135,6 +165,7 @@ impl HexGrid {
     /// use n3gb_rs::HexGrid;
     /// use geo_types::{Polygon, LineString, coord};
     ///
+    /// # fn main() -> Result<(), n3gb_rs::N3gbError> {
     /// let polygon = Polygon::new(
     ///     LineString::from(vec![
     ///         coord! { x: 457000.0, y: 339500.0 },
@@ -145,34 +176,19 @@ impl HexGrid {
     ///     ]),
     ///     vec![],
     /// );
-    /// let grid = HexGrid::from_bng_polygon(&polygon, 10);
+    /// let grid = HexGrid::from_bng_polygon(&polygon, 10)?;
     /// assert!(!grid.is_empty());
+    /// # Ok(())
+    /// # }
     /// ```
-    pub fn from_bng_polygon(polygon: &Polygon<f64>, zoom_level: u8) -> Self {
+    pub fn from_bng_polygon(polygon: &Polygon<f64>, zoom_level: u8) -> Result<Self, N3gbError> {
         let bbox = match polygon.bounding_rect() {
             Some(rect) => rect,
-            None => {
-                return Self {
-                    cells: Vec::new(),
-                    zoom_level,
-                };
-            }
+            None => return Ok(Self::new(Vec::new(), zoom_level)),
         };
 
-        let candidate_cells = generate_cells_for_extent(
-            bbox.min().x,
-            bbox.min().y,
-            bbox.max().x,
-            bbox.max().y,
-            zoom_level,
-        );
-
-        let cells: Vec<HexCell> = candidate_cells
-            .into_par_iter()
-            .filter(|cell| polygon.intersects(&cell.to_polygon()))
-            .collect();
-
-        Self { cells, zoom_level }
+        Ok(Self::from_rect(&bbox, zoom_level)?
+            .retain(|cell| polygon.intersects(&cell.to_polygon())))
     }
 
     /// Creates a HexGrid from a polygon in WGS84 (lon/lat) coordinates.
@@ -203,7 +219,7 @@ impl HexGrid {
     /// ```
     pub fn from_wgs84_polygon(polygon: &Polygon<f64>, zoom_level: u8) -> Result<Self, N3gbError> {
         let bng_polygon = wgs84_polygon_to_bng(polygon)?;
-        Ok(Self::from_bng_polygon(&bng_polygon, zoom_level))
+        Self::from_bng_polygon(&bng_polygon, zoom_level)
     }
 
     /// Creates a HexGrid from a multipolygon in BNG coordinates.
@@ -216,6 +232,7 @@ impl HexGrid {
     /// use n3gb_rs::HexGrid;
     /// use geo_types::{MultiPolygon, Polygon, LineString, coord};
     ///
+    /// # fn main() -> Result<(), n3gb_rs::N3gbError> {
     /// let poly1 = Polygon::new(
     ///     LineString::from(vec![
     ///         coord! { x: 457000.0, y: 339500.0 },
@@ -237,23 +254,22 @@ impl HexGrid {
     ///     vec![],
     /// );
     /// let mp = MultiPolygon::new(vec![poly1, poly2]);
-    /// let grid = HexGrid::from_bng_multipolygon(&mp, 10);
+    /// let grid = HexGrid::from_bng_multipolygon(&mp, 10)?;
     /// assert!(!grid.is_empty());
+    /// # Ok(())
+    /// # }
     /// ```
-    pub fn from_bng_multipolygon(multipolygon: &MultiPolygon<f64>, zoom_level: u8) -> Self {
-        use std::collections::HashSet;
+    pub fn from_bng_multipolygon(
+        multipolygon: &MultiPolygon<f64>,
+        zoom_level: u8,
+    ) -> Result<Self, N3gbError> {
+        let bbox = match multipolygon.bounding_rect() {
+            Some(rect) => rect,
+            None => return Ok(Self::new(Vec::new(), zoom_level)),
+        };
 
-        let mut seen_ids = HashSet::new();
-        let cells: Vec<HexCell> = multipolygon
-            .0
-            .par_iter()
-            .flat_map(|polygon| Self::from_bng_polygon(polygon, zoom_level).cells)
-            .collect::<Vec<_>>()
-            .into_iter()
-            .filter(|cell| seen_ids.insert(cell.id.clone()))
-            .collect();
-
-        Self { cells, zoom_level }
+        Ok(Self::from_rect(&bbox, zoom_level)?
+            .retain(|cell| multipolygon.intersects(&cell.to_polygon())))
     }
 
     /// Creates a HexGrid from a multipolygon in WGS84 (lon/lat) coordinates.
@@ -298,7 +314,20 @@ impl HexGrid {
         zoom_level: u8,
     ) -> Result<Self, N3gbError> {
         let bng_multipolygon = wgs84_multipolygon_to_bng(multipolygon)?;
-        Ok(Self::from_bng_multipolygon(&bng_multipolygon, zoom_level))
+        Self::from_bng_multipolygon(&bng_multipolygon, zoom_level)
+    }
+
+    /// Keeps only cells matching the predicate, rebuilding the spatial index.
+    fn retain<F>(self, predicate: F) -> Self
+    where
+        F: Fn(&HexCell) -> bool + Sync,
+    {
+        let cells: Vec<HexCell> = self
+            .cells
+            .into_par_iter()
+            .filter(|cell| predicate(cell))
+            .collect();
+        Self::new(cells, self.zoom_level)
     }
 
     /// Returns the zoom level of this grid.
@@ -326,14 +355,16 @@ impl HexGrid {
         self.cells.iter()
     }
 
-    /// Finds the cell containing the given point, if any.
+    /// Looks up which hex cell a point falls in.
     ///
-    /// Returns `None` if the point is outside the grid's extent.
+    /// Converts the point to a grid `(row, col)` address, then uses the
+    /// spatial index to find the cell at that address in O(1) time.
+    ///
+    /// Returns `Some(&HexCell)` if found, or `None` if the point falls
+    /// outside this grid's extent.
     pub fn get_cell_at(&self, point: &Point<f64>) -> Option<&HexCell> {
         let (row, col) = point_to_row_col(point, self.zoom_level).ok()?;
-        self.cells
-            .iter()
-            .find(|cell| cell.row == row && cell.col == col)
+        self.index.get(&(row, col)).map(|&i| &self.cells[i])
     }
 
     /// Converts all cells to hexagonal polygons.
@@ -373,17 +404,44 @@ impl HexGrid {
     }
 }
 
-/// Builder for constructing a [`HexGrid`] with a fluent API.
+impl<'a> IntoIterator for &'a HexGrid {
+    type Item = &'a HexCell;
+    type IntoIter = std::slice::Iter<'a, HexCell>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.cells.iter()
+    }
+}
+
+impl IntoIterator for HexGrid {
+    type Item = HexCell;
+    type IntoIter = std::vec::IntoIter<HexCell>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.cells.into_iter()
+    }
+}
+
+/// Builder for constructing a [`HexGrid`].
+///
+/// Remeber that the builder struct is there to collect and normalise inputs (converting to BNG if needed)
+/// then .build() passes the final object into the HexGrid constructors
+/// this does the actual work — generating cells, filtering, building the HashMap index, etc.
+///
+/// It returns a result - either an error or the actual hex grid
 ///
 /// # Example
 ///
 /// ```
 /// use n3gb_rs::HexGrid;
 ///
+/// # fn main() -> Result<(), n3gb_rs::N3gbError> {
 /// let grid = HexGrid::builder()
 ///     .zoom_level(10)
 ///     .bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0))
-///     .build();
+///     .build()?;
+/// # Ok(())
+/// # }
 /// ```
 #[derive(Debug, Default, Clone)]
 pub struct HexGridBuilder {
@@ -423,10 +481,13 @@ impl HexGridBuilder {
     /// ```
     /// use n3gb_rs::HexGrid;
     ///
+    /// # fn main() -> Result<(), n3gb_rs::N3gbError> {
     /// let grid = HexGrid::builder()
     ///     .zoom_level(10)
     ///     .bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0))
-    ///     .build();
+    ///     .build()?;
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn bng_extent(mut self, min: &impl Coordinate, max: &impl Coordinate) -> Self {
         self.min_x = Some(min.x());
@@ -446,7 +507,7 @@ impl HexGridBuilder {
     /// let grid = HexGrid::builder()
     ///     .zoom_level(10)
     ///     .wgs84_extent(&(-2.3, 53.4), &(-2.2, 53.5))?
-    ///     .build();
+    ///     .build()?;
     /// # Ok(())
     /// # }
     /// ```
@@ -474,6 +535,7 @@ impl HexGridBuilder {
     /// use n3gb_rs::HexGrid;
     /// use geo_types::{Polygon, LineString, coord};
     ///
+    /// # fn main() -> Result<(), n3gb_rs::N3gbError> {
     /// let polygon = Polygon::new(
     ///     LineString::from(vec![
     ///         coord! { x: 457000.0, y: 339500.0 },
@@ -487,7 +549,9 @@ impl HexGridBuilder {
     /// let grid = HexGrid::builder()
     ///     .zoom_level(10)
     ///     .bng_polygon(polygon)
-    ///     .build();
+    ///     .build()?;
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn bng_polygon(mut self, polygon: Polygon<f64>) -> Self {
         self.polygon = Some(polygon);
@@ -518,7 +582,7 @@ impl HexGridBuilder {
     /// let grid = HexGrid::builder()
     ///     .zoom_level(10)
     ///     .wgs84_polygon(polygon)?
-    ///     .build();
+    ///     .build()?;
     /// # Ok(())
     /// # }
     /// ```
@@ -538,6 +602,7 @@ impl HexGridBuilder {
     /// use n3gb_rs::HexGrid;
     /// use geo_types::{MultiPolygon, Polygon, LineString, coord};
     ///
+    /// # fn main() -> Result<(), n3gb_rs::N3gbError> {
     /// let poly1 = Polygon::new(
     ///     LineString::from(vec![
     ///         coord! { x: 457000.0, y: 339500.0 },
@@ -562,7 +627,9 @@ impl HexGridBuilder {
     /// let grid = HexGrid::builder()
     ///     .zoom_level(10)
     ///     .bng_multipolygon(mp)
-    ///     .build();
+    ///     .build()?;
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn bng_multipolygon(mut self, multipolygon: MultiPolygon<f64>) -> Self {
         self.multipolygon = Some(multipolygon);
@@ -604,7 +671,7 @@ impl HexGridBuilder {
     /// let grid = HexGrid::builder()
     ///     .zoom_level(10)
     ///     .wgs84_multipolygon(mp)?
-    ///     .build();
+    ///     .build()?;
     /// # Ok(())
     /// # }
     /// ```
@@ -623,7 +690,7 @@ impl HexGridBuilder {
     ///
     /// Panics if `zoom_level` has not been set, or if neither extent, polygon,
     /// nor multipolygon has been set.
-    pub fn build(self) -> HexGrid {
+    pub fn build(self) -> Result<HexGrid, N3gbError> {
         let zoom_level = self.zoom_level.expect("zoom_level must be set");
 
         match (self.multipolygon, self.polygon) {
@@ -648,36 +715,34 @@ impl HexGridBuilder {
     }
 }
 
-/// Basically like when putting a duvet inside it's duvet cover
-/// Find the four outside corners and work inwards from there
+/// Generates all hex cells that cover a bounding box.
+///
+/// This is the single entry point for all grid construction. Every public
+/// constructor (`from_bng_extent`, `from_rect`, `from_bng_polygon`, etc.)
+/// ultimately calls this function.
+///
+/// ## How it works
+///
+/// 1. Converts the four corners of the bounding box to grid `(row, col)` addresses.
+/// 2. Takes the min/max of those to get the full row and column range.
+/// 3. Iterates every `(row, col)` pair in that range (in parallel via Rayon).
+/// 4. For each pair, computes the hex center point and generates a `HexCell`.
+/// 5. Filters out any cells whose center falls outside the BNG grid extents.
+///
+/// ## Errors
+///
+/// Returns `Err(InvalidZoomLevel)` if `zoom_level` exceeds `MAX_ZOOM_LEVEL`.
 fn generate_cells_for_extent(
     min_x: f64,
     min_y: f64,
     max_x: f64,
     max_y: f64,
     zoom_level: u8,
-) -> Vec<HexCell> {
-    // TODO: Don't just return an empty Vec here
-    if zoom_level > MAX_ZOOM_LEVEL {
-        return Vec::new();
-    }
-
-    let (ll_row, ll_col) = match point_to_row_col(&(min_x, min_y), zoom_level) {
-        Ok(v) => v,
-        Err(_) => return Vec::new(),
-    };
-    let (lr_row, lr_col) = match point_to_row_col(&(max_x, min_y), zoom_level) {
-        Ok(v) => v,
-        Err(_) => return Vec::new(),
-    };
-    let (ur_row, ur_col) = match point_to_row_col(&(max_x, max_y), zoom_level) {
-        Ok(v) => v,
-        Err(_) => return Vec::new(),
-    };
-    let (ul_row, ul_col) = match point_to_row_col(&(min_x, max_y), zoom_level) {
-        Ok(v) => v,
-        Err(_) => return Vec::new(),
-    };
+) -> Result<Vec<HexCell>, N3gbError> {
+    let (ll_row, ll_col) = point_to_row_col(&(min_x, min_y), zoom_level)?;
+    let (lr_row, lr_col) = point_to_row_col(&(max_x, min_y), zoom_level)?;
+    let (ur_row, ur_col) = point_to_row_col(&(max_x, max_y), zoom_level)?;
+    let (ul_row, ul_col) = point_to_row_col(&(min_x, max_y), zoom_level)?;
 
     let min_row = ll_row.min(lr_row).min(ur_row).min(ul_row);
     let max_row = ll_row.max(lr_row).max(ur_row).max(ul_row);
@@ -688,7 +753,6 @@ fn generate_cells_for_extent(
         .flat_map(|row| (min_col..=max_col).map(move |col| (row, col)))
         .collect();
 
-    // Build the (row, col) coords in parallel
     let cells: Vec<HexCell> = row_cols
         .into_par_iter()
         .filter_map(|(row, col)| {
@@ -703,7 +767,7 @@ fn generate_cells_for_extent(
         })
         .collect();
 
-    cells
+    Ok(cells)
 }
 
 #[cfg(test)]
@@ -712,70 +776,83 @@ mod tests {
     use geo_types::{coord, point};
 
     #[test]
-    fn test_hex_grid_from_bng_extent() {
-        let grid = HexGrid::from_bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0), 10);
+    fn test_hex_grid_from_bng_extent() -> Result<(), N3gbError> {
+        let grid = HexGrid::from_bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0), 10)?;
         assert!(!grid.is_empty());
         assert_eq!(grid.zoom_level(), 10);
 
         for cell in grid.iter() {
             assert_eq!(cell.zoom_level, 10);
         }
+        Ok(())
     }
 
     #[test]
-    fn test_hex_grid_from_rect() {
+    fn test_hex_grid_from_rect() -> Result<(), N3gbError> {
         let rect = Rect::new(
             coord! { x: 457000.0, y: 339500.0 },
             coord! { x: 458000.0, y: 340500.0 },
         );
-        let grid = HexGrid::from_rect(&rect, 10);
+        let grid = HexGrid::from_rect(&rect, 10)?;
         assert!(!grid.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_hex_grid_builder() {
+    fn test_hex_grid_builder() -> Result<(), N3gbError> {
         let grid = HexGrid::builder()
             .zoom_level(10)
             .bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0))
-            .build();
+            .build()?;
 
         assert!(!grid.is_empty());
         assert_eq!(grid.zoom_level(), 10);
+        Ok(())
     }
 
     #[test]
-    fn test_hex_grid_builder_with_rect() {
+    fn test_hex_grid_builder_with_rect() -> Result<(), N3gbError> {
         let rect = Rect::new(
             coord! { x: 457000.0, y: 339500.0 },
             coord! { x: 458000.0, y: 340500.0 },
         );
-        let grid = HexGrid::builder().zoom_level(10).rect(&rect).build();
+        let grid = HexGrid::builder().zoom_level(10).rect(&rect).build()?;
 
         assert!(!grid.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_get_cell_at() {
-        let grid = HexGrid::from_bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0), 10);
+    fn test_get_cell_at() -> Result<(), N3gbError> {
+        let grid = HexGrid::from_bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0), 10)?;
         let pt = point! { x: 457500.0, y: 340000.0 };
 
         let cell = grid.get_cell_at(&pt);
         assert!(cell.is_some());
+        Ok(())
     }
 
     #[test]
-    fn test_filter_cells() {
-        let grid = HexGrid::from_bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0), 10);
+    fn test_filter_cells() -> Result<(), N3gbError> {
+        let grid = HexGrid::from_bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0), 10)?;
 
         let filtered = grid.filter(|cell| cell.easting() > 457500.0);
         assert!(!filtered.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn test_to_polygons() {
-        let grid = HexGrid::from_bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0), 10);
+    fn test_to_polygons() -> Result<(), N3gbError> {
+        let grid = HexGrid::from_bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0), 10)?;
         let polygons = grid.to_polygons();
 
         assert_eq!(polygons.len(), grid.len());
+        Ok(())
+    }
+
+    #[test]
+    fn test_invalid_zoom_level() {
+        let result = HexGrid::from_bng_extent(&(457000.0, 339500.0), &(458000.0, 340500.0), 20);
+        assert!(matches!(result, Err(N3gbError::InvalidZoomLevel(20))));
     }
 }

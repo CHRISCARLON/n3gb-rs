@@ -99,7 +99,7 @@ impl CsvHexConfig {
         self
     }
 
-    // Include hex polygon geometry in output.
+    /// Include hex polygon geometry in output.
     pub fn with_hex_geometry(mut self, format: GeometryFormat) -> Self {
         self.include_hex_geometry = Some(format);
         self
@@ -181,7 +181,7 @@ fn csv_to_hex_density(
     let mut counts: HashMap<String, usize> = HashMap::new();
 
     for result in reader.records() {
-        let record = result.map_err(|e| N3gbError::CsvError(e.to_string()))?;
+        let record = result?;
         let cells = read_cells_from_record(&record, &source_indices, config)?;
 
         for cell in cells {
@@ -192,16 +192,14 @@ fn csv_to_hex_density(
     let mut sorted: Vec<_> = counts.into_iter().collect();
     sorted.sort_by(|a, b| b.1.cmp(&a.1));
 
-    let out_file = File::create(output_path).map_err(|e| N3gbError::IoError(e.to_string()))?;
+    let out_file = File::create(output_path)?;
     let mut writer = csv::Writer::from_writer(out_file);
 
     let mut header_row: Vec<&str> = vec!["hex_id", "count"];
     if config.include_hex_geometry.is_some() {
         header_row.push("hex_geometry");
     }
-    writer
-        .write_record(&header_row)
-        .map_err(|e| N3gbError::CsvError(e.to_string()))?;
+    writer.write_record(&header_row)?;
 
     for (hex_id, count) in &sorted {
         let mut row: Vec<String> = vec![hex_id.clone(), count.to_string()];
@@ -216,14 +214,10 @@ fn csv_to_hex_density(
             row.push(geom_str);
         }
 
-        writer
-            .write_record(&row)
-            .map_err(|e| N3gbError::CsvError(e.to_string()))?;
+        writer.write_record(&row)?;
     }
 
-    writer
-        .flush()
-        .map_err(|e| N3gbError::CsvError(e.to_string()))?;
+    writer.flush()?;
 
     Ok(())
 }
@@ -270,13 +264,10 @@ pub fn csv_to_hex_csv(
     output_path: impl AsRef<Path>,
     config: &CsvHexConfig,
 ) -> Result<(), N3gbError> {
-    let file = File::open(csv_path).map_err(|e| N3gbError::CsvError(e.to_string()))?;
+    let file = File::open(csv_path)?;
     let mut reader = csv::Reader::from_reader(file);
 
-    let headers = reader
-        .headers()
-        .map_err(|e| N3gbError::CsvError(e.to_string()))?
-        .clone();
+    let headers = reader.headers()?.clone();
 
     // Determine which columns to exclude based on source type
     // Best practice is to always exclude ANY geometry column
@@ -329,7 +320,7 @@ pub fn csv_to_hex_csv(
         return csv_to_hex_density(reader, source_indices, output_path, config);
     }
 
-    let out_file = File::create(output_path).map_err(|e| N3gbError::IoError(e.to_string()))?;
+    let out_file = File::create(output_path)?;
     let mut writer = csv::Writer::from_writer(out_file);
 
     let mut header_row: Vec<&str> = vec!["hex_id"];
@@ -341,12 +332,10 @@ pub fn csv_to_hex_csv(
             header_row.push(h);
         }
     }
-    writer
-        .write_record(&header_row)
-        .map_err(|e| N3gbError::CsvError(e.to_string()))?;
+    writer.write_record(&header_row)?;
 
     for result in reader.records() {
-        let record = result.map_err(|e| N3gbError::CsvError(e.to_string()))?;
+        let record = result?;
 
         let cells = read_cells_from_record(&record, &source_indices, config)?;
 
@@ -367,15 +356,11 @@ pub fn csv_to_hex_csv(
                     row.push(field.to_string());
                 }
             }
-            writer
-                .write_record(&row)
-                .map_err(|e| N3gbError::CsvError(e.to_string()))?;
+            writer.write_record(&row)?;
         }
     }
 
-    writer
-        .flush()
-        .map_err(|e| N3gbError::CsvError(e.to_string()))?;
+    writer.flush()?;
 
     Ok(())
 }

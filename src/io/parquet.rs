@@ -22,26 +22,21 @@ pub fn write_geoparquet(batch: &RecordBatch, path: impl AsRef<Path>) -> Result<(
     let mut encoder = GeoParquetRecordBatchEncoder::try_new(&schema, &options)
         .map_err(|e| N3gbError::IoError(e.to_string()))?;
 
-    let file = File::create(path).map_err(|e| N3gbError::IoError(e.to_string()))?;
-    let mut writer = ArrowWriter::try_new(file, encoder.target_schema(), None)
-        .map_err(|e| N3gbError::IoError(e.to_string()))?;
+    let file = File::create(path)?;
+    let mut writer = ArrowWriter::try_new(file, encoder.target_schema(), None)?;
 
     let encoded_batch = encoder
         .encode_record_batch(batch)
         .map_err(|e| N3gbError::IoError(e.to_string()))?;
 
-    writer
-        .write(&encoded_batch)
-        .map_err(|e| N3gbError::IoError(e.to_string()))?;
+    writer.write(&encoded_batch)?;
 
     let kv_metadata = encoder
         .into_keyvalue()
         .map_err(|e| N3gbError::IoError(e.to_string()))?;
 
     writer.append_key_value_metadata(kv_metadata);
-    writer
-        .finish()
-        .map_err(|e| N3gbError::IoError(e.to_string()))?;
+    writer.finish()?;
 
     Ok(())
 }

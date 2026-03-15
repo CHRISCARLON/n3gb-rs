@@ -75,7 +75,7 @@ impl HexCellsToArrow for [HexCell] {
                 Arc::new(polygon_array.into_arrow()),
             ],
         )
-        .map_err(|e| N3gbError::IoError(e.to_string()))
+        .map_err(N3gbError::from)
     }
 }
 
