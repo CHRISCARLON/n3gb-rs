@@ -1,5 +1,5 @@
 use crate::cell::HexCell;
-use crate::coord::Crs;
+use crate::coord::{ConversionMethod, Crs};
 use crate::error::N3gbError;
 use crate::geom::parse_geometry;
 use std::collections::{HashMap, HashSet};
@@ -35,6 +35,7 @@ pub struct CsvHexConfig {
     pub crs: Crs,
     pub include_hex_geometry: Option<GeometryFormat>,
     pub hex_density: bool,
+    pub conversion_method: ConversionMethod,
 }
 
 impl CsvHexConfig {
@@ -54,6 +55,7 @@ impl CsvHexConfig {
             crs: Crs::default(),
             include_hex_geometry: None,
             hex_density: false,
+            conversion_method: ConversionMethod::default(),
         }
     }
 
@@ -86,6 +88,7 @@ impl CsvHexConfig {
             crs: Crs::default(),
             include_hex_geometry: None,
             hex_density: false,
+            conversion_method: ConversionMethod::default(),
         }
     }
 
@@ -102,6 +105,14 @@ impl CsvHexConfig {
     /// Include hex polygon geometry in output.
     pub fn with_hex_geometry(mut self, format: GeometryFormat) -> Self {
         self.include_hex_geometry = Some(format);
+        self
+    }
+
+    /// Sets the WGS84→BNG conversion backend.
+    ///
+    /// Only relevant when `crs` is [`Crs::Wgs84`]. Defaults to [`ConversionMethod::Proj`].
+    pub fn conversion_method(mut self, method: ConversionMethod) -> Self {
+        self.conversion_method = method;
         self
     }
 
@@ -144,7 +155,16 @@ fn read_cells_from_record(
                 N3gbError::CsvError(format!("Missing geometry column at index {}", idx))
             })?;
             let geom = parse_geometry(geom_str)?;
-            HexCell::from_geometry(geom, config.zoom_level, config.crs)
+            match HexCell::from_geometry(
+                geom,
+                config.zoom_level,
+                config.crs,
+                config.conversion_method,
+            ) {
+                Ok(cells) => Ok(cells),
+                Err(N3gbError::ProjectionError(_)) => Ok(vec![]),
+                Err(e) => Err(e),
+            }
         }
         SourceIndices::Coordinates { x_idx, y_idx } => {
             let x_str = record
@@ -163,8 +183,13 @@ fn read_cells_from_record(
                 .parse()
                 .map_err(|_| N3gbError::CsvError(format!("Invalid Y coordinate: '{}'", y_str)))?;
 
+            use crate::coord::convert_to_bng;
             let cell = match config.crs {
-                Crs::Wgs84 => HexCell::from_wgs84(&(x, y), config.zoom_level)?,
+                Crs::Wgs84 => match convert_to_bng(&(x, y), config.conversion_method) {
+                    Ok(bng) => HexCell::from_bng(&bng, config.zoom_level)?,
+                    Err(N3gbError::ProjectionError(_)) => return Ok(vec![]),
+                    Err(e) => return Err(e),
+                },
                 Crs::Bng => HexCell::from_bng(&(x, y), config.zoom_level)?,
             };
             Ok(vec![cell])
@@ -477,6 +502,92 @@ mod tests {
         assert!(!output.contains("StopCode"));
         assert!(!output.contains("Name"));
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_csv_hex_density_with_geometry() -> Result<(), N3gbError> {
+        let dir = tempdir().map_err(|e| N3gbError::IoError(e.to_string()))?;
+        let csv_path = dir.path().join("test.csv");
+        let output_path = dir.path().join("output.csv");
+
+        let mut file = File::create(&csv_path).map_err(|e| N3gbError::IoError(e.to_string()))?;
+        writeln!(file, "ID,Easting,Northing").map_err(|e| N3gbError::IoError(e.to_string()))?;
+        writeln!(file, "1,359581,172304").map_err(|e| N3gbError::IoError(e.to_string()))?;
+        writeln!(file, "2,359582,172305").map_err(|e| N3gbError::IoError(e.to_string()))?;
+
+        let config = CsvHexConfig::from_coords("Easting", "Northing", 12)
+            .crs(Crs::Bng)
+            .hex_density()
+            .with_hex_geometry(GeometryFormat::Wkt);
+        csv_to_hex_csv(&csv_path, &output_path, &config)?;
+
+        let output =
+            std::fs::read_to_string(&output_path).map_err(|e| N3gbError::IoError(e.to_string()))?;
+        let lines: Vec<&str> = output.lines().collect();
+
+        assert_eq!(lines[0], "hex_id,count,hex_geometry");
+        assert!(lines[1].contains("POLYGON"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_csv_hex_density_wgs84() -> Result<(), N3gbError> {
+        let dir = tempdir().map_err(|e| N3gbError::IoError(e.to_string()))?;
+        let csv_path = dir.path().join("test.csv");
+        let output_path = dir.path().join("output.csv");
+
+        let mut file = File::create(&csv_path).map_err(|e| N3gbError::IoError(e.to_string()))?;
+        writeln!(file, "ID,Lon,Lat").map_err(|e| N3gbError::IoError(e.to_string()))?;
+        // Three points near Bristol — two very close (same hex), one further away
+        writeln!(file, "1,-2.583,51.448").map_err(|e| N3gbError::IoError(e.to_string()))?;
+        writeln!(file, "2,-2.583,51.448").map_err(|e| N3gbError::IoError(e.to_string()))?;
+        writeln!(file, "3,-1.500,53.800").map_err(|e| N3gbError::IoError(e.to_string()))?;
+
+        let config = CsvHexConfig::from_coords("Lon", "Lat", 8)
+            .crs(Crs::Wgs84)
+            .hex_density();
+        csv_to_hex_csv(&csv_path, &output_path, &config)?;
+
+        let output =
+            std::fs::read_to_string(&output_path).map_err(|e| N3gbError::IoError(e.to_string()))?;
+        let lines: Vec<&str> = output.lines().collect();
+
+        // header + two distinct hex cells
+        assert_eq!(lines[0], "hex_id,count");
+        assert_eq!(lines.len(), 3);
+        // highest count first
+        assert!(lines[1].ends_with(",2"));
+        assert!(lines[2].ends_with(",1"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_csv_hex_density_geometry_column() -> Result<(), N3gbError> {
+        let dir = tempdir().map_err(|e| N3gbError::IoError(e.to_string()))?;
+        let csv_path = dir.path().join("test.csv");
+        let output_path = dir.path().join("output.csv");
+
+        let mut file = File::create(&csv_path).map_err(|e| N3gbError::IoError(e.to_string()))?;
+        writeln!(file, "ID,geometry").map_err(|e| N3gbError::IoError(e.to_string()))?;
+        writeln!(file, "1,POINT(530000 180000)").map_err(|e| N3gbError::IoError(e.to_string()))?;
+        writeln!(file, "2,POINT(530001 180001)").map_err(|e| N3gbError::IoError(e.to_string()))?;
+        writeln!(file, "3,POINT(400000 300000)").map_err(|e| N3gbError::IoError(e.to_string()))?;
+
+        let config = CsvHexConfig::new("geometry", 10)
+            .crs(Crs::Bng)
+            .hex_density();
+        csv_to_hex_csv(&csv_path, &output_path, &config)?;
+
+        let output =
+            std::fs::read_to_string(&output_path).map_err(|e| N3gbError::IoError(e.to_string()))?;
+        let lines: Vec<&str> = output.lines().collect();
+
+        assert_eq!(lines[0], "hex_id,count");
+        // first two points should be in the same hex at zoom 10, third in a different one
+        assert_eq!(lines.len(), 3);
+        assert!(lines[1].ends_with(",2"));
+        assert!(lines[2].ends_with(",1"));
         Ok(())
     }
 

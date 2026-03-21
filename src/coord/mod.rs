@@ -1,7 +1,12 @@
 mod bng_transformations;
 
+pub(crate) use bng_transformations::{
+    convert_line_to_bng, convert_multipolygon_to_bng, convert_polygon_to_bng, convert_to_bng,
+};
 pub use bng_transformations::{
-    wgs84_line_to_bng, wgs84_multipolygon_to_bng, wgs84_polygon_to_bng, wgs84_to_bng,
+    wgs84_line_to_bng, wgs84_line_to_bng_ostn15, wgs84_multipolygon_to_bng,
+    wgs84_multipolygon_to_bng_ostn15, wgs84_polygon_to_bng, wgs84_polygon_to_bng_ostn15,
+    wgs84_to_bng, wgs84_to_bng_ostn15,
 };
 
 use geo_types::Point;
@@ -14,6 +19,33 @@ pub enum Crs {
     Wgs84,
     /// British National Grid (EPSG:27700) - easting/northing coordinates
     Bng,
+}
+
+/// Which backend to use when converting WGS84 coordinates to BNG.
+///
+/// When PROJ grid files are installed both methods agree to within ~1mm.
+/// The difference matters when grid files are absent:
+///
+/// | Scenario | `Proj` | `Ostn15` |
+/// |---|---|---|
+/// | PROJ + grid files installed | ~1mm | ~1mm |
+/// | PROJ installed, no grid files | ~5m (silent!) | ~1mm |
+/// | PROJ not installed | build fails | ~1mm |
+///
+/// `Ostn15` is the safer default for libraries — accuracy is guaranteed
+/// regardless of what the user has installed on their system.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ConversionMethod {
+    /// Use the `lonlat_bng` crate with OSTN15 data embedded at compile time.
+    ///
+    /// Always ~1mm accurate. No system dependencies.
+    #[default]
+    Ostn15,
+    /// Use the `proj` system library (equivalent to pyproj).
+    ///
+    /// Requires `libproj` and the `uk_os_OSTN15_NTv2_OSGBtoETRS.tif` grid file.
+    /// Without the grid file PROJ silently falls back to a ~5m Helmert transform.
+    Proj,
 }
 
 /// Trait for types that can provide x/y coordinates.

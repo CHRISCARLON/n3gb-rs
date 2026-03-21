@@ -205,8 +205,9 @@ mod io;
 
 pub use cell::HexCell;
 pub use coord::{
-    Coordinate, Crs, wgs84_line_to_bng, wgs84_multipolygon_to_bng, wgs84_polygon_to_bng,
-    wgs84_to_bng,
+    Coordinate, ConversionMethod, Crs, wgs84_line_to_bng, wgs84_line_to_bng_ostn15,
+    wgs84_multipolygon_to_bng, wgs84_multipolygon_to_bng_ostn15, wgs84_polygon_to_bng,
+    wgs84_polygon_to_bng_ostn15, wgs84_to_bng, wgs84_to_bng_ostn15,
 };
 pub use dimensions::{
     HexagonDims, bounding_box, from_across_corners, from_across_flats, from_apothem, from_area,
@@ -328,7 +329,7 @@ mod tests {
 
     #[test]
     fn test_hexcell_from_wgs84() -> Result<(), N3gbError> {
-        let cell = HexCell::from_wgs84(&(-2.248, 53.481), 12)?;
+        let cell = HexCell::from_wgs84(&(-2.248, 53.481), 12, ConversionMethod::default())?;
 
         assert_eq!(cell.zoom_level, 12);
         assert!(!cell.id.is_empty());

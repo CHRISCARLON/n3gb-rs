@@ -1,4 +1,4 @@
-use crate::coord::{Coordinate, Crs, wgs84_line_to_bng, wgs84_to_bng};
+use crate::coord::{ConversionMethod, Coordinate, Crs, convert_line_to_bng, convert_to_bng};
 use crate::error::N3gbError;
 use crate::geom::create_hexagon;
 use crate::index::{
@@ -145,8 +145,12 @@ impl HexCell {
     /// Create HexCells along a LineString in WGS84 coordinates.
     ///
     /// Converts the line to BNG and returns all unique cells that intersect it.
-    pub fn from_line_string_wgs84(line: &LineString, zoom: u8) -> Result<Vec<Self>, N3gbError> {
-        let bng_line = wgs84_line_to_bng(line)?;
+    pub fn from_line_string_wgs84(
+        line: &LineString,
+        zoom: u8,
+        method: ConversionMethod,
+    ) -> Result<Vec<Self>, N3gbError> {
+        let bng_line = convert_line_to_bng(line, method)?;
         Self::from_line_string_bng(&bng_line, zoom)
     }
 
@@ -184,20 +188,24 @@ impl HexCell {
     ///
     /// # Example
     /// ```
-    /// use n3gb_rs::HexCell;
+    /// use n3gb_rs::{HexCell, ConversionMethod};
     /// use geo_types::Point;
     ///
     /// # fn main() -> Result<(), n3gb_rs::N3gbError> {
     /// // From tuple
-    /// let cell = HexCell::from_wgs84(&(-2.248, 53.481), 12)?;
+    /// let cell = HexCell::from_wgs84(&(-2.248, 53.481), 12, ConversionMethod::Proj)?;
     /// // From Point
-    /// let cell = HexCell::from_wgs84(&Point::new(-2.248, 53.481), 12)?;
+    /// let cell = HexCell::from_wgs84(&Point::new(-2.248, 53.481), 12, ConversionMethod::Proj)?;
     /// println!("Cell ID: {}", cell.id);
     /// # Ok(())
     /// # }
     /// ```
-    pub fn from_wgs84(coord: &impl Coordinate, zoom: u8) -> Result<Self, N3gbError> {
-        let bng = wgs84_to_bng(coord)?;
+    pub fn from_wgs84(
+        coord: &impl Coordinate,
+        zoom: u8,
+        method: ConversionMethod,
+    ) -> Result<Self, N3gbError> {
+        let bng = convert_to_bng(coord, method)?;
         Self::from_bng(&bng, zoom)
     }
 
@@ -210,24 +218,34 @@ impl HexCell {
         geom: Geometry<f64>,
         zoom: u8,
         crs: Crs,
+        method: ConversionMethod,
     ) -> Result<Vec<Self>, N3gbError> {
         match geom {
             Geometry::Point(pt) => {
                 let cell = match crs {
-                    Crs::Wgs84 => Self::from_wgs84(&pt, zoom)?,
+                    Crs::Wgs84 => {
+                        let bng = convert_to_bng(&pt, method)?;
+                        Self::from_bng(&bng, zoom)?
+                    }
                     Crs::Bng => Self::from_bng(&pt, zoom)?,
                 };
                 Ok(vec![cell])
             }
             Geometry::LineString(line) => match crs {
-                Crs::Wgs84 => Self::from_line_string_wgs84(&line, zoom),
+                Crs::Wgs84 => {
+                    let bng_line = convert_line_to_bng(&line, method)?;
+                    Self::from_line_string_bng(&bng_line, zoom)
+                }
                 Crs::Bng => Self::from_line_string_bng(&line, zoom),
             },
             Geometry::MultiLineString(mls) => {
                 let mut all_cells = Vec::new();
                 for line in mls.0 {
                     let cells = match crs {
-                        Crs::Wgs84 => Self::from_line_string_wgs84(&line, zoom)?,
+                        Crs::Wgs84 => {
+                            let bng_line = convert_line_to_bng(&line, method)?;
+                            Self::from_line_string_bng(&bng_line, zoom)?
+                        }
                         Crs::Bng => Self::from_line_string_bng(&line, zoom)?,
                     };
                     all_cells.extend(cells);
@@ -237,7 +255,10 @@ impl HexCell {
             Geometry::Polygon(poly) => {
                 if let Some(centroid) = poly.centroid() {
                     let cell = match crs {
-                        Crs::Wgs84 => Self::from_wgs84(&centroid, zoom)?,
+                        Crs::Wgs84 => {
+                            let bng = convert_to_bng(&centroid, method)?;
+                            Self::from_bng(&bng, zoom)?
+                        }
                         Crs::Bng => Self::from_bng(&centroid, zoom)?,
                     };
                     Ok(vec![cell])
@@ -250,7 +271,10 @@ impl HexCell {
                 for poly in mp.0 {
                     if let Some(centroid) = poly.centroid() {
                         let cell = match crs {
-                            Crs::Wgs84 => Self::from_wgs84(&centroid, zoom)?,
+                            Crs::Wgs84 => {
+                                let bng = convert_to_bng(&centroid, method)?;
+                                Self::from_bng(&bng, zoom)?
+                            }
                             Crs::Bng => Self::from_bng(&centroid, zoom)?,
                         };
                         cells.push(cell);
@@ -262,7 +286,10 @@ impl HexCell {
                 let mut cells = Vec::new();
                 for pt in mp.0 {
                     let cell = match crs {
-                        Crs::Wgs84 => Self::from_wgs84(&pt, zoom)?,
+                        Crs::Wgs84 => {
+                            let bng = convert_to_bng(&pt, method)?;
+                            Self::from_bng(&bng, zoom)?
+                        }
                         Crs::Bng => Self::from_bng(&pt, zoom)?,
                     };
                     cells.push(cell);
@@ -272,7 +299,7 @@ impl HexCell {
             Geometry::GeometryCollection(gc) => {
                 let mut all_cells = Vec::new();
                 for g in gc.0 {
-                    all_cells.extend(Self::from_geometry(g, zoom, crs)?);
+                    all_cells.extend(Self::from_geometry(g, zoom, crs, method)?);
                 }
                 Ok(all_cells)
             }
@@ -350,7 +377,7 @@ mod tests {
 
     #[test]
     fn test_from_wgs84_tuple() -> Result<(), N3gbError> {
-        let cell = HexCell::from_wgs84(&(-2.248, 53.481), 12)?;
+        let cell = HexCell::from_wgs84(&(-2.248, 53.481), 12, ConversionMethod::default())?;
 
         assert_eq!(cell.zoom_level, 12);
         assert!(!cell.id.is_empty());
@@ -363,7 +390,7 @@ mod tests {
     #[test]
     fn test_from_wgs84_point() -> Result<(), N3gbError> {
         let point = Point::new(-2.248, 53.481);
-        let cell = HexCell::from_wgs84(&point, 12)?;
+        let cell = HexCell::from_wgs84(&point, 12, ConversionMethod::default())?;
 
         assert_eq!(cell.zoom_level, 12);
         assert!(!cell.id.is_empty());
@@ -402,7 +429,7 @@ mod tests {
     #[test]
     fn test_from_geometry_point_bng() -> Result<(), N3gbError> {
         let geom = Geometry::Point(Point::new(530000.0, 180000.0));
-        let cells = HexCell::from_geometry(geom, 12, Crs::Bng)?;
+        let cells = HexCell::from_geometry(geom, 12, Crs::Bng, ConversionMethod::default())?;
 
         assert_eq!(cells.len(), 1);
         assert_eq!(cells[0].zoom_level, 12);
@@ -413,7 +440,7 @@ mod tests {
     #[test]
     fn test_from_geometry_point_wgs84() -> Result<(), N3gbError> {
         let geom = Geometry::Point(Point::new(-0.1, 51.5));
-        let cells = HexCell::from_geometry(geom, 12, Crs::Wgs84)?;
+        let cells = HexCell::from_geometry(geom, 12, Crs::Wgs84, ConversionMethod::default())?;
 
         assert_eq!(cells.len(), 1);
         assert_eq!(cells[0].zoom_level, 12);
@@ -424,8 +451,12 @@ mod tests {
     fn test_from_geometry_point_matches_from_bng() -> Result<(), N3gbError> {
         let coord = (530000.0, 180000.0);
         let direct = HexCell::from_bng(&coord, 12)?;
-        let via_geom =
-            HexCell::from_geometry(Geometry::Point(Point::new(coord.0, coord.1)), 12, Crs::Bng)?;
+        let via_geom = HexCell::from_geometry(
+            Geometry::Point(Point::new(coord.0, coord.1)),
+            12,
+            Crs::Bng,
+            ConversionMethod::default(),
+        )?;
 
         assert_eq!(via_geom.len(), 1);
         assert_eq!(via_geom[0].id, direct.id);
@@ -435,7 +466,12 @@ mod tests {
     #[test]
     fn test_from_geometry_linestring() -> Result<(), N3gbError> {
         let line = LineString::from(vec![(530000.0, 180000.0), (531000.0, 181000.0)]);
-        let cells = HexCell::from_geometry(Geometry::LineString(line), 12, Crs::Bng)?;
+        let cells = HexCell::from_geometry(
+            Geometry::LineString(line),
+            12,
+            Crs::Bng,
+            ConversionMethod::default(),
+        )?;
 
         assert!(!cells.is_empty());
         assert!(cells.len() > 1);
@@ -456,7 +492,12 @@ mod tests {
             (x: 530000.0, y: 181000.0),
             (x: 530000.0, y: 180000.0),
         ];
-        let cells = HexCell::from_geometry(Geometry::Polygon(poly), 12, Crs::Bng)?;
+        let cells = HexCell::from_geometry(
+            Geometry::Polygon(poly),
+            12,
+            Crs::Bng,
+            ConversionMethod::default(),
+        )?;
 
         assert_eq!(cells.len(), 1);
         // Centroid should be roughly at (530500, 180500)
@@ -473,7 +514,12 @@ mod tests {
             Point::new(530000.0, 180000.0),
             Point::new(540000.0, 190000.0),
         ]);
-        let cells = HexCell::from_geometry(Geometry::MultiPoint(mp), 12, Crs::Bng)?;
+        let cells = HexCell::from_geometry(
+            Geometry::MultiPoint(mp),
+            12,
+            Crs::Bng,
+            ConversionMethod::default(),
+        )?;
 
         assert_eq!(cells.len(), 2);
         Ok(())
@@ -487,7 +533,12 @@ mod tests {
             LineString::from(vec![(530000.0, 180000.0), (530500.0, 180500.0)]),
             LineString::from(vec![(540000.0, 190000.0), (540500.0, 190500.0)]),
         ]);
-        let cells = HexCell::from_geometry(Geometry::MultiLineString(mls), 12, Crs::Bng)?;
+        let cells = HexCell::from_geometry(
+            Geometry::MultiLineString(mls),
+            12,
+            Crs::Bng,
+            ConversionMethod::default(),
+        )?;
 
         assert!(cells.len() >= 2);
         Ok(())
@@ -511,7 +562,12 @@ mod tests {
                 (x: 540000.0, y: 190000.0),
             ],
         ]);
-        let cells = HexCell::from_geometry(Geometry::MultiPolygon(mp), 12, Crs::Bng)?;
+        let cells = HexCell::from_geometry(
+            Geometry::MultiPolygon(mp),
+            12,
+            Crs::Bng,
+            ConversionMethod::default(),
+        )?;
 
         assert_eq!(cells.len(), 2);
         Ok(())
@@ -525,9 +581,24 @@ mod tests {
             Geometry::Point(Point::new(530000.0, 180000.0)),
             Geometry::Point(Point::new(540000.0, 190000.0)),
         ]);
-        let cells = HexCell::from_geometry(Geometry::GeometryCollection(gc), 12, Crs::Bng)?;
+        let cells = HexCell::from_geometry(
+            Geometry::GeometryCollection(gc),
+            12,
+            Crs::Bng,
+            ConversionMethod::default(),
+        )?;
 
         assert_eq!(cells.len(), 2);
+        Ok(())
+    }
+
+    #[test]
+    fn test_wgs84_same_cell_both_methods() -> Result<(), N3gbError> {
+        let coord = (-2.248, 53.481);
+        let cell_proj = HexCell::from_wgs84(&coord, 10, ConversionMethod::Proj)?;
+        let cell_ostn15 = HexCell::from_wgs84(&coord, 10, ConversionMethod::Ostn15)?;
+
+        assert_eq!(cell_proj.id, cell_ostn15.id);
         Ok(())
     }
 }

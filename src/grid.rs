@@ -1,5 +1,8 @@
 use crate::cell::HexCell;
-use crate::coord::{Coordinate, wgs84_multipolygon_to_bng, wgs84_polygon_to_bng, wgs84_to_bng};
+use crate::coord::{
+    Coordinate, ConversionMethod, convert_multipolygon_to_bng, convert_polygon_to_bng,
+    convert_to_bng,
+};
 use crate::error::N3gbError;
 use crate::index::{GRID_EXTENTS, generate_hex_identifier, point_to_row_col, row_col_to_center};
 use crate::io::arrow::HexCellsToArrow;
@@ -129,12 +132,13 @@ impl HexGrid {
     ///
     /// # fn main() -> Result<(), n3gb_rs::N3gbError> {
     /// // From tuples (lon, lat)
-    /// let grid = HexGrid::from_wgs84_extent(&(-2.3, 53.4), &(-2.2, 53.5), 10)?;
+    /// let grid = HexGrid::from_wgs84_extent(&(-2.3, 53.4), &(-2.2, 53.5), 10, n3gb_rs::ConversionMethod::Proj)?;
     /// // From Points
     /// let grid = HexGrid::from_wgs84_extent(
     ///     &Point::new(-2.3, 53.4),
     ///     &Point::new(-2.2, 53.5),
-    ///     10
+    ///     10,
+    ///     n3gb_rs::ConversionMethod::Proj,
     /// )?;
     /// # Ok(())
     /// # }
@@ -143,9 +147,10 @@ impl HexGrid {
         min: &impl Coordinate,
         max: &impl Coordinate,
         zoom_level: u8,
+        method: ConversionMethod,
     ) -> Result<Self, N3gbError> {
-        let min_bng = wgs84_to_bng(min)?;
-        let max_bng = wgs84_to_bng(max)?;
+        let min_bng = convert_to_bng(min, method)?;
+        let max_bng = convert_to_bng(max, method)?;
         Self::from_extent(
             min_bng.x(),
             min_bng.y(),
@@ -212,13 +217,13 @@ impl HexGrid {
     ///     ]),
     ///     vec![],
     /// );
-    /// let grid = HexGrid::from_wgs84_polygon(&polygon, 10)?;
+    /// let grid = HexGrid::from_wgs84_polygon(&polygon, 10, n3gb_rs::ConversionMethod::Proj)?;
     /// assert!(!grid.is_empty());
     /// # Ok(())
     /// # }
     /// ```
-    pub fn from_wgs84_polygon(polygon: &Polygon<f64>, zoom_level: u8) -> Result<Self, N3gbError> {
-        let bng_polygon = wgs84_polygon_to_bng(polygon)?;
+    pub fn from_wgs84_polygon(polygon: &Polygon<f64>, zoom_level: u8, method: ConversionMethod) -> Result<Self, N3gbError> {
+        let bng_polygon = convert_polygon_to_bng(polygon, method)?;
         Self::from_bng_polygon(&bng_polygon, zoom_level)
     }
 
@@ -304,7 +309,7 @@ impl HexGrid {
     ///     vec![],
     /// );
     /// let mp = MultiPolygon::new(vec![poly1, poly2]);
-    /// let grid = HexGrid::from_wgs84_multipolygon(&mp, 10)?;
+    /// let grid = HexGrid::from_wgs84_multipolygon(&mp, 10, n3gb_rs::ConversionMethod::Proj)?;
     /// assert!(!grid.is_empty());
     /// # Ok(())
     /// # }
@@ -312,8 +317,9 @@ impl HexGrid {
     pub fn from_wgs84_multipolygon(
         multipolygon: &MultiPolygon<f64>,
         zoom_level: u8,
+        method: ConversionMethod,
     ) -> Result<Self, N3gbError> {
-        let bng_multipolygon = wgs84_multipolygon_to_bng(multipolygon)?;
+        let bng_multipolygon = convert_multipolygon_to_bng(multipolygon, method)?;
         Self::from_bng_multipolygon(&bng_multipolygon, zoom_level)
     }
 
@@ -452,6 +458,7 @@ pub struct HexGridBuilder {
     max_y: Option<f64>,
     polygon: Option<Polygon<f64>>,
     multipolygon: Option<MultiPolygon<f64>>,
+    conversion_method: ConversionMethod,
 }
 
 impl HexGridBuilder {
@@ -463,6 +470,15 @@ impl HexGridBuilder {
     /// Sets the zoom level (0-15).
     pub fn zoom_level(mut self, zoom_level: u8) -> Self {
         self.zoom_level = Some(zoom_level);
+        self
+    }
+
+    /// Sets the WGS84→BNG conversion backend.
+    ///
+    /// Must be called before any `wgs84_*` input method.
+    /// Defaults to [`ConversionMethod::Proj`].
+    pub fn conversion_method(mut self, method: ConversionMethod) -> Self {
+        self.conversion_method = method;
         self
     }
 
@@ -516,8 +532,8 @@ impl HexGridBuilder {
         min: &impl Coordinate,
         max: &impl Coordinate,
     ) -> Result<Self, N3gbError> {
-        let min_bng = wgs84_to_bng(min)?;
-        let max_bng = wgs84_to_bng(max)?;
+        let min_bng = convert_to_bng(min, self.conversion_method)?;
+        let max_bng = convert_to_bng(max, self.conversion_method)?;
         self.min_x = Some(min_bng.x());
         self.min_y = Some(min_bng.y());
         self.max_x = Some(max_bng.x());
@@ -587,7 +603,7 @@ impl HexGridBuilder {
     /// # }
     /// ```
     pub fn wgs84_polygon(mut self, polygon: Polygon<f64>) -> Result<Self, N3gbError> {
-        let bng_polygon = wgs84_polygon_to_bng(&polygon)?;
+        let bng_polygon = convert_polygon_to_bng(&polygon, self.conversion_method)?;
         self.polygon = Some(bng_polygon);
         Ok(self)
     }
@@ -679,7 +695,7 @@ impl HexGridBuilder {
         mut self,
         multipolygon: MultiPolygon<f64>,
     ) -> Result<Self, N3gbError> {
-        let bng_multipolygon = wgs84_multipolygon_to_bng(&multipolygon)?;
+        let bng_multipolygon = convert_multipolygon_to_bng(&multipolygon, self.conversion_method)?;
         self.multipolygon = Some(bng_multipolygon);
         Ok(self)
     }
