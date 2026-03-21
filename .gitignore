@@ -24,3 +24,4 @@ target
 *.parquet
 PROJECT_MAP.md
 .claude
+.DS_Store
