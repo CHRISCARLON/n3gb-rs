@@ -2,7 +2,7 @@ use crate::coord::{ConversionMethod, Coordinate, Crs, convert_line_to_bng, conve
 use crate::error::N3gbError;
 use crate::geom::create_hexagon;
 use crate::index::{
-    CELL_RADIUS, decode_hex_identifier, generate_hex_identifier, point_to_row_col,
+    CELL_RADIUS, decode_hex_identifier, generate_hex_identifier, offset_to_cube, point_to_row_col,
     row_col_to_center,
 };
 use crate::io::arrow::HexCellsToArrow;
@@ -309,6 +309,35 @@ impl HexCell {
         }
     }
 
+    /// Returns the grid distance (number of hex steps) between two cells.
+    ///
+    /// Both cells must be at the same zoom level.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use n3gb_rs::HexCell;
+    ///
+    /// # fn main() -> Result<(), n3gb_rs::N3gbError> {
+    /// let a = HexCell::from_bng(&(383640.0, 398260.0), 10)?;
+    /// let b = HexCell::from_bng(&(383640.0, 398260.0), 10)?;
+    /// assert_eq!(a.grid_distance(&b)?, 0);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn grid_distance(&self, other: &Self) -> Result<u64, N3gbError> {
+        if self.zoom_level != other.zoom_level {
+            return Err(N3gbError::ZoomLevelMismatch(
+                self.zoom_level,
+                other.zoom_level,
+            ));
+        }
+        let (q1, r1, s1) = offset_to_cube(self.row, self.col);
+        let (q2, r2, s2) = offset_to_cube(other.row, other.col);
+        let dist = ((q1 - q2).abs() + (r1 - r2).abs() + (s1 - s2).abs()) / 2;
+        Ok(dist as u64)
+    }
+
     /// Returns the easting (x-coordinate) of the cell center in meters.
     pub fn easting(&self) -> f64 {
         self.center.x()
@@ -351,6 +380,32 @@ impl HexCell {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_grid_distance_same_cell() -> Result<(), N3gbError> {
+        let cell = HexCell::from_bng(&(383640.0, 398260.0), 10)?;
+        assert_eq!(cell.grid_distance(&cell)?, 0);
+        Ok(())
+    }
+
+    #[test]
+    fn test_grid_distance_adjacent() -> Result<(), N3gbError> {
+        let a = HexCell::from_bng(&(383640.0, 398260.0), 10)?;
+        let width = crate::index::CELL_WIDTHS[10];
+        let b = HexCell::from_bng(&(a.easting() + width, a.northing()), 10)?;
+        assert_eq!(a.grid_distance(&b)?, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn test_grid_distance_zoom_mismatch() {
+        let a = HexCell::from_bng(&(383640.0, 398260.0), 10).unwrap();
+        let b = HexCell::from_bng(&(383640.0, 398260.0), 12).unwrap();
+        assert!(matches!(
+            a.grid_distance(&b),
+            Err(N3gbError::ZoomLevelMismatch(10, 12))
+        ));
+    }
 
     #[test]
     fn test_from_bng_tuple() -> Result<(), N3gbError> {

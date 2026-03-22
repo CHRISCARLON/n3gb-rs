@@ -46,6 +46,14 @@ pub fn row_col_to_center(row: i64, col: i64, z: u8) -> Result<Point<f64>, N3gbEr
     Ok(Point::new(x, y))
 }
 
+/// Converts odd-r offset (row, col) to cube coordinates (q, r, s).
+pub(crate) fn offset_to_cube(row: i64, col: i64) -> (i64, i64, i64) {
+    let q = col - row / 2;
+    let r = row;
+    let s = -q - r;
+    (q, r, s)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

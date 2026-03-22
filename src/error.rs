@@ -21,6 +21,8 @@ pub enum N3gbError {
     CsvError(String),
     /// Failed to parse geometry from string (GeoJSON or WKT).
     GeometryParseError(String),
+    /// Grid distance requires both cells to be at the same zoom level.
+    ZoomLevelMismatch(u8, u8),
 }
 
 impl std::fmt::Display for N3gbError {
@@ -36,6 +38,9 @@ impl std::fmt::Display for N3gbError {
             N3gbError::IoError(msg) => write!(f, "IO error: {}", msg),
             N3gbError::CsvError(msg) => write!(f, "CSV error: {}", msg),
             N3gbError::GeometryParseError(msg) => write!(f, "Geometry parse error: {}", msg),
+            N3gbError::ZoomLevelMismatch(a, b) => {
+                write!(f, "Zoom level mismatch: {} vs {}", a, b)
+            }
         }
     }
 }
