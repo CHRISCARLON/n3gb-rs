@@ -3,11 +3,6 @@ mod bng_transformations;
 pub(crate) use bng_transformations::{
     convert_line_to_bng, convert_multipolygon_to_bng, convert_polygon_to_bng, convert_to_bng,
 };
-pub use bng_transformations::{
-    wgs84_line_to_bng, wgs84_line_to_bng_ostn15, wgs84_multipolygon_to_bng,
-    wgs84_multipolygon_to_bng_ostn15, wgs84_polygon_to_bng, wgs84_polygon_to_bng_ostn15,
-    wgs84_to_bng, wgs84_to_bng_ostn15,
-};
 
 use geo_types::Point;
 

@@ -204,11 +204,7 @@ mod index;
 mod io;
 
 pub use cell::HexCell;
-pub use coord::{
-    Coordinate, ConversionMethod, Crs, wgs84_line_to_bng, wgs84_line_to_bng_ostn15,
-    wgs84_multipolygon_to_bng, wgs84_multipolygon_to_bng_ostn15, wgs84_polygon_to_bng,
-    wgs84_polygon_to_bng_ostn15, wgs84_to_bng, wgs84_to_bng_ostn15,
-};
+pub use coord::{Coordinate, ConversionMethod, Crs};
 pub use dimensions::{
     HexagonDims, bounding_box, from_across_corners, from_across_flats, from_apothem, from_area,
     from_circumradius, from_side,
@@ -220,7 +216,7 @@ pub use index::{
     decode_hex_identifier, generate_hex_identifier, point_to_row_col, row_col_to_center,
 };
 pub use io::{
-    CoordinateSource, CsvHexConfig, CsvToHex, GeometryFormat, HexCellsToArrow,
+    CoordinateSource, CsvHexConfig, GeometryFormat, HexCellsToArrow,
     HexCellsToGeoParquet, csv_to_hex_csv, write_geoparquet,
 };
 

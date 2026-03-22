@@ -6,7 +6,7 @@
 ///
 /// Run with:
 ///   cargo run --example check_proj
-use n3gb_rs::{wgs84_to_bng, wgs84_to_bng_ostn15};
+use n3gb_rs::{ConversionMethod, HexCell};
 
 fn main() {
     // Must be set before any proj object is created
@@ -33,20 +33,22 @@ fn main() {
     println!("{}", "-".repeat(102));
 
     for (name, lon, lat) in &locations {
-        let proj = wgs84_to_bng(&(*lon, *lat)).expect("proj conversion failed");
-        let ostn15 = wgs84_to_bng_ostn15(&(*lon, *lat)).expect("ostn15 conversion failed");
+        let proj = HexCell::from_wgs84(&(*lon, *lat), 12, ConversionMethod::Proj)
+            .expect("proj conversion failed");
+        let ostn15 = HexCell::from_wgs84(&(*lon, *lat), 12, ConversionMethod::Ostn15)
+            .expect("ostn15 conversion failed");
 
-        let diff_e = (proj.x() - ostn15.x()).abs();
-        let diff_n = (proj.y() - ostn15.y()).abs();
+        let diff_e = (proj.easting() - ostn15.easting()).abs();
+        let diff_n = (proj.northing() - ostn15.northing()).abs();
         max_diff = max_diff.max(diff_e).max(diff_n);
 
         println!(
             "{:<30} {:>12.3} {:>12.3} {:>12.3} {:>12.3} {:>10.4} {:>10.4}",
             name,
-            proj.x(),
-            proj.y(),
-            ostn15.x(),
-            ostn15.y(),
+            proj.easting(),
+            proj.northing(),
+            ostn15.easting(),
+            ostn15.northing(),
             diff_e,
             diff_n,
         );

@@ -43,22 +43,16 @@ pub fn write_geoparquet(batch: &RecordBatch, path: impl AsRef<Path>) -> Result<(
 
 /// Trait for writing collections of [`HexCell`]s directly to GeoParquet.
 ///
-/// Implemented for `[HexCell]` and `Vec<HexCell>`.
+/// Implemented for any type that dereferences to `[HexCell]` (e.g. `Vec<HexCell>`, `&[HexCell]`).
 pub trait HexCellsToGeoParquet: HexCellsToArrow {
     /// Writes cells to a GeoParquet file at the given path.
     fn to_geoparquet(&self, path: impl AsRef<Path>) -> Result<(), N3gbError>;
 }
 
-impl HexCellsToGeoParquet for [HexCell] {
+impl<T: AsRef<[HexCell]>> HexCellsToGeoParquet for T {
     fn to_geoparquet(&self, path: impl AsRef<Path>) -> Result<(), N3gbError> {
         let batch = self.to_record_batch()?;
         write_geoparquet(&batch, path)
-    }
-}
-
-impl HexCellsToGeoParquet for Vec<HexCell> {
-    fn to_geoparquet(&self, path: impl AsRef<Path>) -> Result<(), N3gbError> {
-        self.as_slice().to_geoparquet(path)
     }
 }
 

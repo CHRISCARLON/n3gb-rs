@@ -16,7 +16,7 @@ fn bng_metadata() -> Arc<Metadata> {
 
 /// Trait for converting collections of [`HexCell`]s to Arrow arrays.
 ///
-/// Implemented for `[HexCell]` and `Vec<HexCell>`.
+/// Implemented for any type that dereferences to `[HexCell]` (e.g. `Vec<HexCell>`, `&[HexCell]`).
 pub trait HexCellsToArrow {
     /// Converts cell centers to an Arrow PointArray.
     fn to_arrow_points(&self) -> PointArray;
@@ -26,31 +26,34 @@ pub trait HexCellsToArrow {
     fn to_record_batch(&self) -> Result<RecordBatch, N3gbError>;
 }
 
-impl HexCellsToArrow for [HexCell] {
+impl<T: AsRef<[HexCell]>> HexCellsToArrow for T {
     fn to_arrow_points(&self) -> PointArray {
+        let cells = self.as_ref();
         let point = PointType::new(Dimension::XY, bng_metadata());
-        let mut builder = PointBuilder::with_capacity(point, self.len());
+        let mut builder = PointBuilder::with_capacity(point, cells.len());
 
-        for cell in self {
+        for cell in cells {
             builder.push_point(Some(&cell.center));
         }
         builder.finish()
     }
 
     fn to_arrow_polygons(&self) -> PolygonArray {
+        let cells = self.as_ref();
         let poly = PolygonType::new(Dimension::XY, bng_metadata());
-        let polygons: Vec<_> = self.par_iter().map(|c: &HexCell| c.to_polygon()).collect();
+        let polygons: Vec<_> = cells.par_iter().map(|c: &HexCell| c.to_polygon()).collect();
         PolygonBuilder::from_polygons(&polygons, poly).finish()
     }
 
     fn to_record_batch(&self) -> Result<RecordBatch, N3gbError> {
+        let cells = self.as_ref();
         let polygon_array = self.to_arrow_polygons();
-        let ids: StringArray = self.iter().map(|c| Some(c.id.as_str())).collect();
-        let zoom_levels: UInt8Array = self.iter().map(|c| Some(c.zoom_level)).collect();
-        let rows: Int64Array = self.iter().map(|c| Some(c.row)).collect();
-        let cols: Int64Array = self.iter().map(|c| Some(c.col)).collect();
-        let eastings: Float64Array = self.iter().map(|c| Some(c.easting())).collect();
-        let northings: Float64Array = self.iter().map(|c| Some(c.northing())).collect();
+        let ids: StringArray = cells.iter().map(|c| Some(c.id.as_str())).collect();
+        let zoom_levels: UInt8Array = cells.iter().map(|c| Some(c.zoom_level)).collect();
+        let rows: Int64Array = cells.iter().map(|c| Some(c.row)).collect();
+        let cols: Int64Array = cells.iter().map(|c| Some(c.col)).collect();
+        let eastings: Float64Array = cells.iter().map(|c| Some(c.easting())).collect();
+        let northings: Float64Array = cells.iter().map(|c| Some(c.northing())).collect();
 
         let geometry_field = polygon_array.extension_type().to_field("geometry", false);
         let schema = Schema::new(vec![
@@ -76,20 +79,6 @@ impl HexCellsToArrow for [HexCell] {
             ],
         )
         .map_err(N3gbError::from)
-    }
-}
-
-impl HexCellsToArrow for Vec<HexCell> {
-    fn to_arrow_points(&self) -> PointArray {
-        self.as_slice().to_arrow_points()
-    }
-
-    fn to_arrow_polygons(&self) -> PolygonArray {
-        self.as_slice().to_arrow_polygons()
-    }
-
-    fn to_record_batch(&self) -> Result<RecordBatch, N3gbError> {
-        self.as_slice().to_record_batch()
     }
 }
 

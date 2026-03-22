@@ -84,18 +84,7 @@ where
 /// Look for `uk_os_OSTN15_NTv2_OSGBtoETRS.tif - succeeded` (grid active)
 /// or `OSGB 1936 to WGS 84 (6)` (Helmert fallback).
 ///
-/// # Example
-///
-/// ```
-/// use n3gb_rs::wgs84_to_bng;
-///
-/// # fn main() -> Result<(), n3gb_rs::N3gbError> {
-/// let bng = wgs84_to_bng(&(-2.248, 53.481))?;
-/// println!("Easting: {}, Northing: {}", bng.x(), bng.y());
-/// # Ok(())
-/// # }
-/// ```
-pub fn wgs84_to_bng<C: super::Coordinate>(coord: &C) -> Result<Point<f64>, N3gbError> {
+pub(crate) fn wgs84_to_bng<C: super::Coordinate>(coord: &C) -> Result<Point<f64>, N3gbError> {
     with_wgs84_to_bng_proj(|proj| {
         let (easting, northing) = proj
             .convert((coord.x(), coord.y()))
@@ -104,7 +93,7 @@ pub fn wgs84_to_bng<C: super::Coordinate>(coord: &C) -> Result<Point<f64>, N3gbE
     })
 }
 
-pub fn wgs84_line_to_bng(line: &LineString) -> Result<LineString, N3gbError> {
+pub(crate) fn wgs84_line_to_bng(line: &LineString) -> Result<LineString, N3gbError> {
     let coords: Result<Vec<Coord>, N3gbError> = line
         .0
         .par_iter()
@@ -120,14 +109,14 @@ pub fn wgs84_line_to_bng(line: &LineString) -> Result<LineString, N3gbError> {
     Ok(LineString::new(coords?))
 }
 
-pub fn wgs84_polygon_to_bng(polygon: &Polygon<f64>) -> Result<Polygon<f64>, N3gbError> {
+pub(crate) fn wgs84_polygon_to_bng(polygon: &Polygon<f64>) -> Result<Polygon<f64>, N3gbError> {
     let exterior = wgs84_line_to_bng(polygon.exterior())?;
     let interiors: Result<Vec<LineString>, N3gbError> =
         polygon.interiors().iter().map(wgs84_line_to_bng).collect();
     Ok(Polygon::new(exterior, interiors?))
 }
 
-pub fn wgs84_multipolygon_to_bng(
+pub(crate) fn wgs84_multipolygon_to_bng(
     multipolygon: &MultiPolygon<f64>,
 ) -> Result<MultiPolygon<f64>, N3gbError> {
     let polygons: Result<Vec<Polygon<f64>>, N3gbError> =
@@ -140,24 +129,15 @@ pub fn wgs84_multipolygon_to_bng(
 /// Uses the `lonlat_bng` crate with embedded OSTN15 grid shift data.
 /// No system PROJ library required. Suitable for surveying-grade accuracy.
 ///
-/// # Example
-///
-/// ```
-/// use n3gb_rs::wgs84_to_bng_ostn15;
-///
-/// # fn main() -> Result<(), n3gb_rs::N3gbError> {
-/// let bng = wgs84_to_bng_ostn15(&(-2.248, 53.481))?;
-/// println!("Easting: {}, Northing: {}", bng.x(), bng.y());
-/// # Ok(())
-/// # }
-/// ```
-pub fn wgs84_to_bng_ostn15<C: super::Coordinate>(coord: &C) -> Result<Point<f64>, N3gbError> {
+pub(crate) fn wgs84_to_bng_ostn15<C: super::Coordinate>(
+    coord: &C,
+) -> Result<Point<f64>, N3gbError> {
     lonlat_bng::convert_osgb36(coord.x(), coord.y())
         .map(|(e, n)| Point::new(e, n))
         .map_err(|_| N3gbError::ProjectionError("OSTN15 conversion failed".into()))
 }
 
-pub fn wgs84_line_to_bng_ostn15(line: &LineString) -> Result<LineString, N3gbError> {
+pub(crate) fn wgs84_line_to_bng_ostn15(line: &LineString) -> Result<LineString, N3gbError> {
     let coords: Result<Vec<Coord>, N3gbError> = line
         .0
         .par_iter()
@@ -170,7 +150,9 @@ pub fn wgs84_line_to_bng_ostn15(line: &LineString) -> Result<LineString, N3gbErr
     Ok(LineString::new(coords?))
 }
 
-pub fn wgs84_polygon_to_bng_ostn15(polygon: &Polygon<f64>) -> Result<Polygon<f64>, N3gbError> {
+pub(crate) fn wgs84_polygon_to_bng_ostn15(
+    polygon: &Polygon<f64>,
+) -> Result<Polygon<f64>, N3gbError> {
     let exterior = wgs84_line_to_bng_ostn15(polygon.exterior())?;
     let interiors: Result<Vec<LineString>, N3gbError> = polygon
         .interiors()
@@ -180,7 +162,7 @@ pub fn wgs84_polygon_to_bng_ostn15(polygon: &Polygon<f64>) -> Result<Polygon<f64
     Ok(Polygon::new(exterior, interiors?))
 }
 
-pub fn wgs84_multipolygon_to_bng_ostn15(
+pub(crate) fn wgs84_multipolygon_to_bng_ostn15(
     multipolygon: &MultiPolygon<f64>,
 ) -> Result<MultiPolygon<f64>, N3gbError> {
     let polygons: Result<Vec<Polygon<f64>>, N3gbError> = multipolygon

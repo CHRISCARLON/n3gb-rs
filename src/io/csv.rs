@@ -126,24 +126,6 @@ impl CsvHexConfig {
     }
 }
 
-pub trait CsvToHex {
-    fn to_hex_csv(
-        &self,
-        output_path: impl AsRef<Path>,
-        config: &CsvHexConfig,
-    ) -> Result<(), N3gbError>;
-}
-
-impl<P: AsRef<Path>> CsvToHex for P {
-    fn to_hex_csv(
-        &self,
-        output_path: impl AsRef<Path>,
-        config: &CsvHexConfig,
-    ) -> Result<(), N3gbError> {
-        csv_to_hex_csv(self, output_path, config)
-    }
-}
-
 fn read_cells_from_record(
     record: &csv::StringRecord,
     source_indices: &SourceIndices,
