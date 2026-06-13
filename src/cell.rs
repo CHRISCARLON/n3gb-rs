@@ -139,11 +139,13 @@ impl HexCell {
             })
             .sum();
 
+        // We add this so that we can create the hashset with a known size
         let estimated_cells = ((total_length / cell_radius) * 1.5) as usize + line.0.len();
-
         let mut seen: HashSet<(i64, i64)> = HashSet::with_capacity(estimated_cells);
         let mut cells: Vec<HexCell> = Vec::with_capacity(estimated_cells);
 
+        // For each segment pair
+        // [A,B], [B,C], [C,D], etc
         for window in line.0.windows(2) {
             let start = &window[0];
             let end = &window[1];
@@ -153,6 +155,8 @@ impl HexCell {
             let segment_length = (dx * dx + dy * dy).sqrt();
             let steps = (segment_length / step_size).ceil() as usize;
 
+            // Get the points in each segment
+            // Get their HexCells
             for i in 0..=steps {
                 let t = if steps == 0 {
                     0.0
@@ -164,7 +168,10 @@ impl HexCell {
 
                 let (row, col) = point_to_row_col(&(x, y), zoom)?;
 
-                if seen.insert((row, col)) {
+                // true = first time we've hit this hex along the line
+                // acts as a way to not let duplicates in
+                let is_new_cell = seen.insert((row, col));
+                if is_new_cell {
                     let center = row_col_to_center(row, col, zoom)?;
                     let id = generate_hex_identifier(center.x(), center.y(), zoom);
                     cells.push(HexCell::new(id, center, zoom, row, col));
@@ -200,6 +207,9 @@ impl HexCell {
     }
 
     /// Create a HexCell from British National Grid coordinates
+    ///
+    /// Use this when you have a known BNG point. For arbitrary or parsed geometry
+    /// whose type is only known at runtime, use [`HexCell::from_geometry`].
     ///
     /// # Arguments
     /// * `coord` - The BNG coordinate (tuple or `Point`) to index.
@@ -241,6 +251,9 @@ impl HexCell {
 
     /// Create a HexCell from WGS84 (lon/lat) coordinates
     ///
+    /// Use this when you have a known WGS84 point. For arbitrary or parsed geometry
+    /// whose type is only known at runtime, use [`HexCell::from_geometry`].
+    ///
     /// # Arguments
     /// * `coord` - The WGS84 coordinate (tuple or `Point`) to index.
     /// * `zoom` - The zoom level (0-15) at which to generate the cell.
@@ -278,9 +291,15 @@ impl HexCell {
 
     /// Create HexCells from an arbitrary `geo_types::Geometry`.
     ///
-    /// Dispatches on geometry type and CRS to produce one or more cells.
-    /// Points and polygon centroids produce a single cell; lines and
-    /// collections may produce many.
+    /// This is the general-purpose dispatcher for input whose type is only known
+    /// at runtime — for example geometry produced by [`parse_geometry`] from WKT or
+    /// GeoJSON. It matches on the geometry type and `crs`, then delegates to the
+    /// typed constructors below. When you already know the input type, prefer the
+    /// direct constructors instead: [`HexCell::from_bng`] / [`HexCell::from_wgs84`]
+    /// for points and [`HexCell::from_line_string_bng`] /
+    /// [`HexCell::from_line_string_wgs84`] for lines. They are more ergonomic (no
+    /// `Geometry` wrapper, no `crs` flag) and the point constructors return a single
+    /// `HexCell` rather than a `Vec`.
     ///
     /// # Arguments
     /// * `geom` - The geometry to convert into one or more cells.
@@ -289,7 +308,13 @@ impl HexCell {
     /// * `method` - The coordinate conversion method used to project WGS84 to BNG.
     ///
     /// # Returns
-    /// A vector of `HexCell`s derived from the geometry.
+    /// A vector of `HexCell`s derived from the geometry. The result is **always** a
+    /// `Vec`, even for single-cell inputs: a `Point`, or a `Polygon`/`MultiPolygon`
+    /// (each reduced to its centroid), yields one cell per geometry, while lines,
+    /// multi-geometries, and collections may yield many. An empty `Polygon` (no
+    /// centroid) contributes no cells.
+    ///
+    /// [`parse_geometry`]: crate::parse_geometry
     ///
     /// # Errors
     /// Returns [`N3gbError::InvalidZoomLevel`] if `zoom` exceeds the maximum supported zoom level,
