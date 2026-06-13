@@ -1,6 +1,6 @@
 [package]
 name = "n3gb-rs"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
 description = "A Rust implementation of a hierarchical hex-based spatial indexing system based on the OSGB National Grid."
 license = "Apache-2.0"
@@ -25,10 +25,21 @@ proj = "0.31.0"
 rayon = "1.11"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
-lonlat_bng = "0.9.0"
+lonlat_bng = { version = "0.9.0", optional = true }
 
 [dev-dependencies]
 tempfile = "3"
+
+[features]
+default = ["ostn15"]
+# OSTN15 conversion backend, provided by the `lonlat_bng` crate. Enabled by
+# default. Turned off on docs.rs (see [package.metadata.docs.rs]) because
+# lonlat_bng's build script runs cbindgen, which shells out to `cargo metadata`
+# and needs network access that the docs.rs sandbox forbids.
+ostn15 = ["dep:lonlat_bng"]
+
+[package.metadata.docs.rs]
+no-default-features = true
 
 [lints.clippy]
 all = "warn"

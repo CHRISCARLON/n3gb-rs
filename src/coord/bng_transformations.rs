@@ -23,7 +23,16 @@ pub(crate) fn convert_to_bng<C: super::Coordinate>(
 ) -> Result<Point<f64>, N3gbError> {
     match method {
         ConversionMethod::Proj => wgs84_to_bng(coord),
-        ConversionMethod::Ostn15 => wgs84_to_bng_ostn15(coord),
+        ConversionMethod::Ostn15 => {
+            #[cfg(feature = "ostn15")]
+            {
+                wgs84_to_bng_ostn15(coord)
+            }
+            #[cfg(not(feature = "ostn15"))]
+            {
+                Err(ostn15_disabled())
+            }
+        }
     }
 }
 
@@ -45,7 +54,16 @@ pub(crate) fn convert_line_to_bng(
 ) -> Result<LineString, N3gbError> {
     match method {
         ConversionMethod::Proj => wgs84_line_to_bng(line),
-        ConversionMethod::Ostn15 => wgs84_line_to_bng_ostn15(line),
+        ConversionMethod::Ostn15 => {
+            #[cfg(feature = "ostn15")]
+            {
+                wgs84_line_to_bng_ostn15(line)
+            }
+            #[cfg(not(feature = "ostn15"))]
+            {
+                Err(ostn15_disabled())
+            }
+        }
     }
 }
 
@@ -67,7 +85,16 @@ pub(crate) fn convert_polygon_to_bng(
 ) -> Result<Polygon<f64>, N3gbError> {
     match method {
         ConversionMethod::Proj => wgs84_polygon_to_bng(polygon),
-        ConversionMethod::Ostn15 => wgs84_polygon_to_bng_ostn15(polygon),
+        ConversionMethod::Ostn15 => {
+            #[cfg(feature = "ostn15")]
+            {
+                wgs84_polygon_to_bng_ostn15(polygon)
+            }
+            #[cfg(not(feature = "ostn15"))]
+            {
+                Err(ostn15_disabled())
+            }
+        }
     }
 }
 
@@ -89,7 +116,16 @@ pub(crate) fn convert_multipolygon_to_bng(
 ) -> Result<MultiPolygon<f64>, N3gbError> {
     match method {
         ConversionMethod::Proj => wgs84_multipolygon_to_bng(multipolygon),
-        ConversionMethod::Ostn15 => wgs84_multipolygon_to_bng_ostn15(multipolygon),
+        ConversionMethod::Ostn15 => {
+            #[cfg(feature = "ostn15")]
+            {
+                wgs84_multipolygon_to_bng_ostn15(multipolygon)
+            }
+            #[cfg(not(feature = "ostn15"))]
+            {
+                Err(ostn15_disabled())
+            }
+        }
     }
 }
 
@@ -224,6 +260,20 @@ pub(crate) fn wgs84_multipolygon_to_bng(
     Ok(MultiPolygon::new(polygons?))
 }
 
+/// Builds the error returned when the OSTN15 backend is requested but the
+/// `ostn15` feature is disabled (e.g. in the docs.rs build).
+///
+/// # Returns
+/// A [`N3gbError::ProjectionError`] explaining that the `ostn15` feature is off.
+#[cfg(not(feature = "ostn15"))]
+fn ostn15_disabled() -> N3gbError {
+    N3gbError::ProjectionError(
+        "OSTN15 backend unavailable: enable the `ostn15` feature (on by default) \
+         or use ConversionMethod::Proj"
+            .into(),
+    )
+}
+
 /// Converts WGS84 (longitude, latitude) coordinates to British National Grid using OSTN15.
 ///
 /// Uses the `lonlat_bng` crate with embedded OSTN15 grid shift data.
@@ -237,6 +287,7 @@ pub(crate) fn wgs84_multipolygon_to_bng(
 ///
 /// # Errors
 /// Returns [`N3gbError::ProjectionError`] if the OSTN15 conversion fails.
+#[cfg(feature = "ostn15")]
 pub(crate) fn wgs84_to_bng_ostn15<C: super::Coordinate>(
     coord: &C,
 ) -> Result<Point<f64>, N3gbError> {
@@ -256,6 +307,7 @@ pub(crate) fn wgs84_to_bng_ostn15<C: super::Coordinate>(
 /// # Errors
 /// Returns [`N3gbError::ProjectionError`] if the OSTN15 conversion fails for any
 /// vertex.
+#[cfg(feature = "ostn15")]
 pub(crate) fn wgs84_line_to_bng_ostn15(line: &LineString) -> Result<LineString, N3gbError> {
     let coords: Result<Vec<Coord>, N3gbError> = line
         .0
@@ -280,6 +332,7 @@ pub(crate) fn wgs84_line_to_bng_ostn15(line: &LineString) -> Result<LineString, 
 /// # Errors
 /// Returns [`N3gbError::ProjectionError`] if the OSTN15 conversion fails for any
 /// vertex.
+#[cfg(feature = "ostn15")]
 pub(crate) fn wgs84_polygon_to_bng_ostn15(
     polygon: &Polygon<f64>,
 ) -> Result<Polygon<f64>, N3gbError> {
@@ -303,6 +356,7 @@ pub(crate) fn wgs84_polygon_to_bng_ostn15(
 /// # Errors
 /// Returns [`N3gbError::ProjectionError`] if the OSTN15 conversion fails for any
 /// vertex.
+#[cfg(feature = "ostn15")]
 pub(crate) fn wgs84_multipolygon_to_bng_ostn15(
     multipolygon: &MultiPolygon<f64>,
 ) -> Result<MultiPolygon<f64>, N3gbError> {
@@ -356,6 +410,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "ostn15")]
     fn test_wgs84_to_bng_ostn15() -> Result<(), N3gbError> {
         let bng = wgs84_to_bng_ostn15(&(-2.2479699500757597, 53.48082746395233))?;
 
@@ -365,6 +420,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "ostn15")]
     fn test_ostn15_same_result_tuple_and_point() -> Result<(), N3gbError> {
         let lon = -2.2479699500757597;
         let lat = 53.48082746395233;
@@ -378,6 +434,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "ostn15")]
     fn test_proj_and_ostn15_close_agreement() -> Result<(), N3gbError> {
         let coord = (-2.2479699500757597, 53.48082746395233);
         let proj_result = wgs84_to_bng(&coord)?;
@@ -391,6 +448,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "ostn15")]
     fn test_wgs84_line_to_bng_ostn15() -> Result<(), N3gbError> {
         use geo_types::LineString;
         let line: LineString = vec![(-2.248, 53.481), (-1.5, 53.8)].into();
@@ -403,6 +461,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "ostn15")]
     fn test_wgs84_polygon_to_bng_ostn15() -> Result<(), N3gbError> {
         use geo_types::{LineString, Polygon};
         let exterior: LineString = vec![
