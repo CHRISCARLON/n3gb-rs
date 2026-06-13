@@ -3,7 +3,7 @@ name = "n3gb-rs"
 version = "0.2.1"
 edition = "2024"
 description = "A Rust implementation of a hierarchical hex-based spatial indexing system based on the OSGB National Grid."
-license = "MIT"
+license = "Apache-2.0"
 repository = "https://github.com/CHRISCARLON/n3gb-rs"
 keywords = ["hex", "grid", "gis", "geoparquet", "arrow"]
 
@@ -29,3 +29,9 @@ lonlat_bng = "0.8.1"
 
 [dev-dependencies]
 tempfile = "3"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "warn"
