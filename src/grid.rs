@@ -69,6 +69,10 @@ impl HexGrid {
     }
 
     /// Creates a new [`HexGridBuilder`] for grid construction.
+    ///
+    /// # Returns
+    ///
+    /// A fresh [`HexGridBuilder`] with no parameters set.
     pub fn builder() -> HexGridBuilder {
         HexGridBuilder::new()
     }
@@ -86,6 +90,20 @@ impl HexGrid {
     }
 
     /// Creates a HexGrid from a `geo_types::Rect` in BNG coordinates.
+    ///
+    /// # Arguments
+    ///
+    /// * `rect` - The bounding rectangle, in BNG (EPSG:27700) coordinates.
+    /// * `zoom_level` - The zoom level for the generated cells.
+    ///
+    /// # Returns
+    ///
+    /// A `HexGrid` covering the rectangle's extent.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`N3gbError::InvalidZoomLevel`] if `zoom_level` exceeds the
+    /// maximum supported zoom level.
     pub fn from_rect(rect: &Rect<f64>, zoom_level: u8) -> Result<Self, N3gbError> {
         Self::from_extent(
             rect.min().x,
@@ -115,6 +133,21 @@ impl HexGrid {
     /// # Ok(())
     /// # }
     /// ```
+    ///
+    /// # Arguments
+    ///
+    /// * `min` - The minimum (lower-left) corner, in BNG (EPSG:27700) coordinates.
+    /// * `max` - The maximum (upper-right) corner, in BNG (EPSG:27700) coordinates.
+    /// * `zoom_level` - The zoom level for the generated cells.
+    ///
+    /// # Returns
+    ///
+    /// A `HexGrid` covering the given extent.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`N3gbError::InvalidZoomLevel`] if `zoom_level` exceeds the
+    /// maximum supported zoom level.
     pub fn from_bng_extent(
         min: &impl Coordinate,
         max: &impl Coordinate,
@@ -143,6 +176,23 @@ impl HexGrid {
     /// # Ok(())
     /// # }
     /// ```
+    ///
+    /// # Arguments
+    ///
+    /// * `min` - The minimum (lower-left) corner, in WGS84 (lon/lat) coordinates.
+    /// * `max` - The maximum (upper-right) corner, in WGS84 (lon/lat) coordinates.
+    /// * `zoom_level` - The zoom level for the generated cells.
+    /// * `method` - The conversion backend used to project from WGS84 to BNG.
+    ///
+    /// # Returns
+    ///
+    /// A `HexGrid` covering the given extent.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`N3gbError::ProjectionError`] if projecting the corners from
+    /// WGS84 to BNG fails, or [`N3gbError::InvalidZoomLevel`] if `zoom_level`
+    /// exceeds the maximum supported zoom level.
     pub fn from_wgs84_extent(
         min: &impl Coordinate,
         max: &impl Coordinate,
@@ -186,6 +236,21 @@ impl HexGrid {
     /// # Ok(())
     /// # }
     /// ```
+    ///
+    /// # Arguments
+    ///
+    /// * `polygon` - The polygon, in BNG (EPSG:27700) coordinates.
+    /// * `zoom_level` - The zoom level for the generated cells.
+    ///
+    /// # Returns
+    ///
+    /// A `HexGrid` containing only the cells whose hexagon intersects the
+    /// polygon. Empty if the polygon has no bounding rectangle.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`N3gbError::InvalidZoomLevel`] if `zoom_level` exceeds the
+    /// maximum supported zoom level.
     pub fn from_bng_polygon(polygon: &Polygon<f64>, zoom_level: u8) -> Result<Self, N3gbError> {
         let bbox = match polygon.bounding_rect() {
             Some(rect) => rect,
@@ -222,6 +287,23 @@ impl HexGrid {
     /// # Ok(())
     /// # }
     /// ```
+    ///
+    /// # Arguments
+    ///
+    /// * `polygon` - The polygon, in WGS84 (lon/lat) coordinates.
+    /// * `zoom_level` - The zoom level for the generated cells.
+    /// * `method` - The conversion backend used to project from WGS84 to BNG.
+    ///
+    /// # Returns
+    ///
+    /// A `HexGrid` containing only the cells whose hexagon intersects the
+    /// projected polygon.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`N3gbError::ProjectionError`] if projecting the polygon from
+    /// WGS84 to BNG fails, or [`N3gbError::InvalidZoomLevel`] if `zoom_level`
+    /// exceeds the maximum supported zoom level.
     pub fn from_wgs84_polygon(
         polygon: &Polygon<f64>,
         zoom_level: u8,
@@ -268,6 +350,22 @@ impl HexGrid {
     /// # Ok(())
     /// # }
     /// ```
+    ///
+    /// # Arguments
+    ///
+    /// * `multipolygon` - The multipolygon, in BNG (EPSG:27700) coordinates.
+    /// * `zoom_level` - The zoom level for the generated cells.
+    ///
+    /// # Returns
+    ///
+    /// A `HexGrid` containing only the cells whose hexagon intersects any
+    /// polygon, with duplicates removed. Empty if the multipolygon has no
+    /// bounding rectangle.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`N3gbError::InvalidZoomLevel`] if `zoom_level` exceeds the
+    /// maximum supported zoom level.
     pub fn from_bng_multipolygon(
         multipolygon: &MultiPolygon<f64>,
         zoom_level: u8,
@@ -318,6 +416,23 @@ impl HexGrid {
     /// # Ok(())
     /// # }
     /// ```
+    ///
+    /// # Arguments
+    ///
+    /// * `multipolygon` - The multipolygon, in WGS84 (lon/lat) coordinates.
+    /// * `zoom_level` - The zoom level for the generated cells.
+    /// * `method` - The conversion backend used to project from WGS84 to BNG.
+    ///
+    /// # Returns
+    ///
+    /// A `HexGrid` containing only the cells whose hexagon intersects any
+    /// projected polygon, with duplicates removed.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`N3gbError::ProjectionError`] if projecting the multipolygon
+    /// from WGS84 to BNG fails, or [`N3gbError::InvalidZoomLevel`] if
+    /// `zoom_level` exceeds the maximum supported zoom level.
     pub fn from_wgs84_multipolygon(
         multipolygon: &MultiPolygon<f64>,
         zoom_level: u8,
@@ -341,26 +456,46 @@ impl HexGrid {
     }
 
     /// Returns the zoom level of this grid.
+    ///
+    /// # Returns
+    ///
+    /// The zoom level shared by all cells in this grid.
     pub fn zoom_level(&self) -> u8 {
         self.zoom_level
     }
 
     /// Returns the number of cells in this grid.
+    ///
+    /// # Returns
+    ///
+    /// The count of cells in this grid.
     pub fn len(&self) -> usize {
         self.cells.len()
     }
 
     /// Returns `true` if the grid contains no cells.
+    ///
+    /// # Returns
+    ///
+    /// `true` if the grid contains no cells, `false` otherwise.
     pub fn is_empty(&self) -> bool {
         self.cells.is_empty()
     }
 
     /// Returns a slice of all cells in this grid.
+    ///
+    /// # Returns
+    ///
+    /// A slice borrowing all cells in this grid.
     pub fn cells(&self) -> &[HexCell] {
         &self.cells
     }
 
     /// Returns an iterator over the cells in this grid.
+    ///
+    /// # Returns
+    ///
+    /// An iterator yielding a reference to each cell in this grid.
     pub fn iter(&self) -> impl Iterator<Item = &HexCell> {
         self.cells.iter()
     }
@@ -372,12 +507,25 @@ impl HexGrid {
     ///
     /// Returns `Some(&HexCell)` if found, or `None` if the point falls
     /// outside this grid's extent.
+    ///
+    /// # Arguments
+    ///
+    /// * `point` - The point to locate, in BNG (EPSG:27700) coordinates.
+    ///
+    /// # Returns
+    ///
+    /// `Some(&HexCell)` containing the point, or `None` if no cell in this
+    /// grid contains it.
     pub fn get_cell_at(&self, point: &Point<f64>) -> Option<&HexCell> {
         let (row, col) = point_to_row_col(point, self.zoom_level).ok()?;
         self.index.get(&(row, col)).map(|&i| &self.cells[i])
     }
 
     /// Converts all cells to hexagonal polygons.
+    ///
+    /// # Returns
+    ///
+    /// A vector containing the hexagonal polygon for each cell in this grid.
     pub fn to_polygons(&self) -> Vec<Polygon<f64>> {
         self.cells
             .par_iter()
@@ -386,6 +534,15 @@ impl HexGrid {
     }
 
     /// Returns cells matching the given predicate.
+    ///
+    /// # Arguments
+    ///
+    /// * `predicate` - A closure called with each cell; cells for which it
+    ///   returns `true` are included.
+    ///
+    /// # Returns
+    ///
+    /// A vector of references to the cells that satisfy the predicate.
     pub fn filter<F>(&self, predicate: F) -> Vec<&HexCell>
     where
         F: Fn(&HexCell) -> bool,
@@ -394,21 +551,51 @@ impl HexGrid {
     }
 
     /// Converts all cell centers to an Arrow PointArray.
+    ///
+    /// # Returns
+    ///
+    /// A [`PointArray`] containing the center point of each cell in this grid.
     pub fn to_arrow_points(&self) -> PointArray {
         self.cells.to_arrow_points()
     }
 
     /// Converts all cells to an Arrow PolygonArray.
+    ///
+    /// # Returns
+    ///
+    /// A [`PolygonArray`] containing the hexagonal polygon for each cell in
+    /// this grid.
     pub fn to_arrow_polygons(&self) -> PolygonArray {
         self.cells.to_arrow_polygons()
     }
 
     /// Converts all cells to an Arrow RecordBatch with all attributes.
+    ///
+    /// # Returns
+    ///
+    /// A [`RecordBatch`] containing every cell's attributes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`N3gbError::IoError`] if the record batch cannot be
+    /// constructed.
     pub fn to_record_batch(&self) -> Result<RecordBatch, N3gbError> {
         self.cells.to_record_batch()
     }
 
     /// Writes all cells to a GeoParquet file.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The filesystem path to write the GeoParquet file to.
+    ///
+    /// # Returns
+    ///
+    /// `()` on success, once all cells have been written to the file.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`N3gbError::IoError`] if the file cannot be written.
     pub fn to_geoparquet(&self, path: impl AsRef<Path>) -> Result<(), N3gbError> {
         self.cells.to_geoparquet(path)
     }
@@ -467,11 +654,23 @@ pub struct HexGridBuilder {
 
 impl HexGridBuilder {
     /// Creates a new builder with no parameters set.
+    ///
+    /// # Returns
+    ///
+    /// A fresh `HexGridBuilder` with no parameters set.
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Sets the zoom level (0-15).
+    ///
+    /// # Arguments
+    ///
+    /// * `zoom_level` - The zoom level for the generated cells.
+    ///
+    /// # Returns
+    ///
+    /// The updated builder, for chaining.
     pub fn zoom_level(mut self, zoom_level: u8) -> Self {
         self.zoom_level = Some(zoom_level);
         self
@@ -481,12 +680,28 @@ impl HexGridBuilder {
     ///
     /// Must be called before any `wgs84_*` input method.
     /// Defaults to [`ConversionMethod::Proj`].
+    ///
+    /// # Arguments
+    ///
+    /// * `method` - The conversion backend used to project from WGS84 to BNG.
+    ///
+    /// # Returns
+    ///
+    /// The updated builder, for chaining.
     pub fn conversion_method(mut self, method: ConversionMethod) -> Self {
         self.conversion_method = method;
         self
     }
 
     /// Sets the extent from a `geo_types::Rect` in BNG coordinates.
+    ///
+    /// # Arguments
+    ///
+    /// * `rect` - The bounding rectangle, in BNG (EPSG:27700) coordinates.
+    ///
+    /// # Returns
+    ///
+    /// The updated builder, for chaining.
     pub fn rect(mut self, rect: &Rect<f64>) -> Self {
         self.min_x = Some(rect.min().x);
         self.min_y = Some(rect.min().y);
@@ -509,6 +724,15 @@ impl HexGridBuilder {
     /// # Ok(())
     /// # }
     /// ```
+    ///
+    /// # Arguments
+    ///
+    /// * `min` - The minimum (lower-left) corner, in BNG (EPSG:27700) coordinates.
+    /// * `max` - The maximum (upper-right) corner, in BNG (EPSG:27700) coordinates.
+    ///
+    /// # Returns
+    ///
+    /// The updated builder, for chaining.
     pub fn bng_extent(mut self, min: &impl Coordinate, max: &impl Coordinate) -> Self {
         self.min_x = Some(min.x());
         self.min_y = Some(min.y());
@@ -531,6 +755,20 @@ impl HexGridBuilder {
     /// # Ok(())
     /// # }
     /// ```
+    ///
+    /// # Arguments
+    ///
+    /// * `min` - The minimum (lower-left) corner, in WGS84 (lon/lat) coordinates.
+    /// * `max` - The maximum (upper-right) corner, in WGS84 (lon/lat) coordinates.
+    ///
+    /// # Returns
+    ///
+    /// The updated builder, for chaining.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`N3gbError::ProjectionError`] if projecting the corners from
+    /// WGS84 to BNG fails.
     pub fn wgs84_extent(
         mut self,
         min: &impl Coordinate,
@@ -573,6 +811,14 @@ impl HexGridBuilder {
     /// # Ok(())
     /// # }
     /// ```
+    ///
+    /// # Arguments
+    ///
+    /// * `polygon` - The polygon, in BNG (EPSG:27700) coordinates.
+    ///
+    /// # Returns
+    ///
+    /// The updated builder, for chaining.
     pub fn bng_polygon(mut self, polygon: Polygon<f64>) -> Self {
         self.polygon = Some(polygon);
         self
@@ -606,6 +852,19 @@ impl HexGridBuilder {
     /// # Ok(())
     /// # }
     /// ```
+    ///
+    /// # Arguments
+    ///
+    /// * `polygon` - The polygon, in WGS84 (lon/lat) coordinates.
+    ///
+    /// # Returns
+    ///
+    /// The updated builder, for chaining.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`N3gbError::ProjectionError`] if projecting the polygon from
+    /// WGS84 to BNG fails.
     pub fn wgs84_polygon(mut self, polygon: Polygon<f64>) -> Result<Self, N3gbError> {
         let bng_polygon = convert_polygon_to_bng(&polygon, self.conversion_method)?;
         self.polygon = Some(bng_polygon);
@@ -651,6 +910,14 @@ impl HexGridBuilder {
     /// # Ok(())
     /// # }
     /// ```
+    ///
+    /// # Arguments
+    ///
+    /// * `multipolygon` - The multipolygon, in BNG (EPSG:27700) coordinates.
+    ///
+    /// # Returns
+    ///
+    /// The updated builder, for chaining.
     pub fn bng_multipolygon(mut self, multipolygon: MultiPolygon<f64>) -> Self {
         self.multipolygon = Some(multipolygon);
         self
@@ -695,6 +962,19 @@ impl HexGridBuilder {
     /// # Ok(())
     /// # }
     /// ```
+    ///
+    /// # Arguments
+    ///
+    /// * `multipolygon` - The multipolygon, in WGS84 (lon/lat) coordinates.
+    ///
+    /// # Returns
+    ///
+    /// The updated builder, for chaining.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`N3gbError::ProjectionError`] if projecting the multipolygon
+    /// from WGS84 to BNG fails.
     pub fn wgs84_multipolygon(
         mut self,
         multipolygon: MultiPolygon<f64>,
@@ -705,6 +985,17 @@ impl HexGridBuilder {
     }
 
     /// Builds the [`HexGrid`].
+    ///
+    /// # Returns
+    ///
+    /// The constructed [`HexGrid`], built from the multipolygon, polygon, or
+    /// extent that was set on the builder.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`N3gbError::InvalidZoomLevel`] if `zoom_level` exceeds the
+    /// maximum supported zoom level, and propagates any error from the
+    /// selected construction source.
     ///
     /// # Panics
     ///

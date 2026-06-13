@@ -9,6 +9,11 @@ use geoarrow_schema::{Crs, Dimension, Metadata, PointType, PolygonType};
 use rayon::prelude::*;
 use std::sync::Arc;
 
+/// Builds the geoarrow metadata describing the British National Grid CRS (EPSG:27700).
+///
+/// # Returns
+///
+/// An `Arc<Metadata>` carrying the EPSG:27700 CRS authority code.
 fn bng_metadata() -> Arc<Metadata> {
     let crs = Crs::from_authority_code("EPSG:27700".to_string());
     Arc::new(Metadata::new(crs, None))
@@ -19,10 +24,28 @@ fn bng_metadata() -> Arc<Metadata> {
 /// Implemented for any type that dereferences to `[HexCell]` (e.g. `Vec<HexCell>`, `&[HexCell]`).
 pub trait HexCellsToArrow {
     /// Converts cell centers to an Arrow PointArray.
+    ///
+    /// # Returns
+    ///
+    /// A [`PointArray`] containing one XY point per cell center, tagged with the BNG CRS.
     fn to_arrow_points(&self) -> PointArray;
     /// Converts cells to an Arrow PolygonArray of hexagons.
+    ///
+    /// # Returns
+    ///
+    /// A [`PolygonArray`] containing one hexagon polygon per cell, tagged with the BNG CRS.
     fn to_arrow_polygons(&self) -> PolygonArray;
     /// Converts cells to a RecordBatch with id, zoom_level, row, col, easting, northing, and geometry.
+    ///
+    /// # Returns
+    ///
+    /// A [`RecordBatch`] with columns `id`, `zoom_level`, `row`, `col`, `easting`,
+    /// `northing`, and `geometry`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`N3gbError::IoError`] if the columns cannot be assembled into a valid
+    /// [`RecordBatch`] (via `From<ArrowError>`).
     fn to_record_batch(&self) -> Result<RecordBatch, N3gbError>;
 }
 

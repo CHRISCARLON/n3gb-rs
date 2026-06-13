@@ -49,24 +49,46 @@ pub enum ConversionMethod {
 /// This allows functions to accept either type.
 pub trait Coordinate {
     /// Returns the x-coordinate (easting or longitude).
+    ///
+    /// # Returns
+    /// The x-coordinate (easting or longitude).
     fn x(&self) -> f64;
     /// Returns the y-coordinate (northing or latitude).
+    ///
+    /// # Returns
+    /// The y-coordinate (northing or latitude).
     fn y(&self) -> f64;
 }
 
 impl Coordinate for (f64, f64) {
+    /// Returns the x-coordinate (first tuple element).
+    ///
+    /// # Returns
+    /// The first element of the tuple.
     fn x(&self) -> f64 {
         self.0
     }
+    /// Returns the y-coordinate (second tuple element).
+    ///
+    /// # Returns
+    /// The second element of the tuple.
     fn y(&self) -> f64 {
         self.1
     }
 }
 
 impl Coordinate for Point<f64> {
+    /// Returns the x-coordinate of the point.
+    ///
+    /// # Returns
+    /// The point's x-coordinate.
     fn x(&self) -> f64 {
         Point::x(*self)
     }
+    /// Returns the y-coordinate of the point.
+    ///
+    /// # Returns
+    /// The point's y-coordinate.
     fn y(&self) -> f64 {
         Point::y(*self)
     }

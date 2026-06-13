@@ -27,6 +27,7 @@ pub enum CoordinateSource {
     CoordinateColumns { x_column: String, y_column: String },
 }
 
+/// Configuration controlling how a CSV file is converted into hex IDs.
 #[derive(Debug, Clone)]
 pub struct CsvHexConfig {
     pub source: CoordinateSource,
@@ -40,6 +41,13 @@ pub struct CsvHexConfig {
 
 impl CsvHexConfig {
     /// Create config for a CSV with a geometry column (WKT or GeoJSON).
+    ///
+    /// # Arguments
+    /// * `geometry_column` - Name of the CSV column containing WKT or GeoJSON geometry.
+    /// * `zoom_level` - Hex zoom level to encode cells at.
+    ///
+    /// # Returns
+    /// A new [`CsvHexConfig`] using the given geometry column as its coordinate source.
     ///
     /// # Example
     /// ```
@@ -60,6 +68,14 @@ impl CsvHexConfig {
     }
 
     /// Create config for a CSV with separate X/Y coordinate columns.
+    ///
+    /// # Arguments
+    /// * `x_column` - Name of the CSV column holding the X coordinate (Easting or Longitude).
+    /// * `y_column` - Name of the CSV column holding the Y coordinate (Northing or Latitude).
+    /// * `zoom_level` - Hex zoom level to encode cells at.
+    ///
+    /// # Returns
+    /// A new [`CsvHexConfig`] using the given coordinate columns as its source.
     ///
     /// # Example
     /// ```
@@ -92,17 +108,37 @@ impl CsvHexConfig {
         }
     }
 
+    /// Set the columns to drop from the output.
+    ///
+    /// # Arguments
+    /// * `columns` - Names of input columns to exclude from the output rows.
+    ///
+    /// # Returns
+    /// The updated config for chaining.
     pub fn exclude(mut self, columns: Vec<String>) -> Self {
         self.exclude_columns = columns;
         self
     }
 
+    /// Set the coordinate reference system of the input data.
+    ///
+    /// # Arguments
+    /// * `crs` - The [`Crs`] of the input coordinates or geometry.
+    ///
+    /// # Returns
+    /// The updated config for chaining.
     pub fn crs(mut self, crs: Crs) -> Self {
         self.crs = crs;
         self
     }
 
     /// Include hex polygon geometry in output.
+    ///
+    /// # Arguments
+    /// * `format` - The [`GeometryFormat`] (WKT or GeoJSON) for the emitted hex geometry.
+    ///
+    /// # Returns
+    /// The updated config for chaining.
     pub fn with_hex_geometry(mut self, format: GeometryFormat) -> Self {
         self.include_hex_geometry = Some(format);
         self
@@ -111,6 +147,12 @@ impl CsvHexConfig {
     /// Sets the WGS84→BNG conversion backend.
     ///
     /// Only relevant when `crs` is [`Crs::Wgs84`]. Defaults to [`ConversionMethod::Proj`].
+    ///
+    /// # Arguments
+    /// * `method` - The [`ConversionMethod`] backend used to convert WGS84 to BNG.
+    ///
+    /// # Returns
+    /// The updated config for chaining.
     pub fn conversion_method(mut self, method: ConversionMethod) -> Self {
         self.conversion_method = method;
         self
@@ -120,12 +162,30 @@ impl CsvHexConfig {
     ///
     /// Output columns: `hex_id`, `count` (and optionally `hex_geometry`).
     /// Input attribute columns are dropped since rows are aggregated.
+    ///
+    /// # Returns
+    /// The updated config for chaining.
     pub fn hex_density(mut self) -> Self {
         self.hex_density = true;
         self
     }
 }
 
+/// Convert a single CSV record into the hex cells it covers.
+///
+/// # Arguments
+/// * `record` - The CSV record to read coordinate or geometry values from.
+/// * `source_indices` - Resolved column indices identifying the geometry or X/Y columns.
+/// * `config` - Conversion configuration (zoom level, CRS, conversion method).
+///
+/// # Returns
+/// The hex cells covered by the record, or an empty vector if the coordinates fall
+/// outside the projectable area.
+///
+/// # Errors
+/// Returns [`N3gbError::CsvError`] if a referenced column is missing or a coordinate
+/// fails to parse, [`N3gbError::GeometryParseError`] if a geometry value cannot be
+/// parsed, and [`N3gbError::InvalidZoomLevel`] if the configured zoom level is invalid.
 fn read_cells_from_record(
     record: &csv::StringRecord,
     source_indices: &SourceIndices,
@@ -179,6 +239,22 @@ fn read_cells_from_record(
     }
 }
 
+/// Aggregate records into one output row per hex cell with a count of input rows.
+///
+/// # Arguments
+/// * `reader` - The CSV reader positioned after the header row.
+/// * `source_indices` - Resolved column indices identifying the geometry or X/Y columns.
+/// * `output_path` - Path of the CSV file to write the aggregated counts to.
+/// * `config` - Conversion configuration controlling zoom, CRS, and optional hex geometry.
+///
+/// # Returns
+/// `()` on success, after the aggregated CSV has been written and flushed.
+///
+/// # Errors
+/// Returns [`N3gbError::CsvError`] if reading or writing records fails, or for a missing
+/// or invalid coordinate column; [`N3gbError::GeometryParseError`] if a geometry value
+/// cannot be parsed; [`N3gbError::InvalidZoomLevel`] if the configured zoom level is
+/// invalid; and [`N3gbError::IoError`] if the output file cannot be created.
 fn csv_to_hex_density(
     mut reader: csv::Reader<File>,
     source_indices: SourceIndices,
@@ -229,11 +305,25 @@ fn csv_to_hex_density(
     Ok(())
 }
 
+/// Render a polygon as a Well-Known Text (WKT) string.
+///
+/// # Arguments
+/// * `polygon` - The polygon to serialize.
+///
+/// # Returns
+/// The WKT representation of the polygon.
 fn polygon_to_wkt(polygon: &geo_types::Polygon<f64>) -> String {
     use wkt::ToWkt;
     polygon.wkt_string()
 }
 
+/// Render a polygon as a GeoJSON geometry string.
+///
+/// # Arguments
+/// * `polygon` - The polygon to serialize.
+///
+/// # Returns
+/// The GeoJSON representation of the polygon.
 fn polygon_to_geojson(polygon: &geo_types::Polygon<f64>) -> String {
     let geom = geojson::Geometry::from(polygon);
     geom.to_string()
@@ -266,6 +356,22 @@ fn polygon_to_geojson(polygon: &geo_types::Polygon<f64>) -> String {
 ///
 /// csv_to_hex_csv("bus_stops.csv", "output.csv", &config).unwrap();
 /// ```
+///
+/// # Arguments
+/// * `csv_path` - Path of the input CSV file to read.
+/// * `output_path` - Path of the CSV file to write hex IDs (and optional geometry) to.
+/// * `config` - Conversion configuration describing the source columns, zoom, and CRS.
+///
+/// # Returns
+/// `()` on success, after the output CSV has been written and flushed.
+///
+/// # Errors
+/// Returns [`N3gbError::CsvError`] if the input cannot be read, a configured column name
+/// is empty or not found, or a record cannot be read or written;
+/// [`N3gbError::GeometryParseError`] if a geometry value cannot be parsed;
+/// [`N3gbError::InvalidZoomLevel`] if the configured zoom level is invalid; and
+/// [`N3gbError::IoError`] if the input file cannot be opened or the output file cannot
+/// be created.
 pub fn csv_to_hex_csv(
     csv_path: impl AsRef<Path>,
     output_path: impl AsRef<Path>,

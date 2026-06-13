@@ -50,6 +50,17 @@ pub struct HexCell {
 }
 
 impl HexCell {
+    /// Constructs a `HexCell` directly from its component fields.
+    ///
+    /// # Arguments
+    /// * `id` - The encoded hex identifier for the cell.
+    /// * `center` - The cell center point in British National Grid coordinates.
+    /// * `zoom_level` - The zoom level (0-15) of the cell.
+    /// * `row` - The row index in the hexagonal grid.
+    /// * `col` - The column index in the hexagonal grid.
+    ///
+    /// # Returns
+    /// A new `HexCell` with the given field values.
     pub(crate) fn new(id: String, center: Point<f64>, zoom_level: u8, row: i64, col: i64) -> Self {
         Self {
             id,
@@ -61,6 +72,18 @@ impl HexCell {
     }
 
     /// Create a HexCell from an encoded hex identifier
+    ///
+    /// # Arguments
+    /// * `id` - The Base64 URL-safe encoded hex identifier to decode.
+    ///
+    /// # Returns
+    /// The decoded `HexCell` corresponding to the identifier.
+    ///
+    /// # Errors
+    /// Returns [`N3gbError::InvalidIdentifierLength`], [`N3gbError::InvalidChecksum`],
+    /// [`N3gbError::Base64DecodeError`], or [`N3gbError::UnsupportedVersion`] if the
+    /// identifier cannot be decoded, and [`N3gbError::InvalidZoomLevel`] if the decoded
+    /// zoom level is out of range while re-indexing.
     ///
     /// # Example
     /// ```
@@ -89,6 +112,16 @@ impl HexCell {
     /// Create HexCells from a LineString in BNG coordinates.
     ///
     /// Samples points along the line and returns all unique cells that intersect it.
+    ///
+    /// # Arguments
+    /// * `line` - The line in British National Grid coordinates to sample.
+    /// * `zoom` - The zoom level (0-15) at which to generate cells.
+    ///
+    /// # Returns
+    /// A vector of unique `HexCell`s that the line passes through.
+    ///
+    /// # Errors
+    /// Returns [`N3gbError::InvalidZoomLevel`] if `zoom` exceeds the maximum supported zoom level.
     pub fn from_line_string_bng(line: &LineString, zoom: u8) -> Result<Vec<Self>, N3gbError> {
         if zoom > crate::index::MAX_ZOOM_LEVEL {
             return Err(N3gbError::InvalidZoomLevel(zoom));
@@ -145,6 +178,18 @@ impl HexCell {
     /// Create HexCells along a LineString in WGS84 coordinates.
     ///
     /// Converts the line to BNG and returns all unique cells that intersect it.
+    ///
+    /// # Arguments
+    /// * `line` - The line in WGS84 (lon/lat) coordinates to sample.
+    /// * `zoom` - The zoom level (0-15) at which to generate cells.
+    /// * `method` - The coordinate conversion method used to project WGS84 to BNG.
+    ///
+    /// # Returns
+    /// A vector of unique `HexCell`s that the line passes through.
+    ///
+    /// # Errors
+    /// Returns [`N3gbError::ProjectionError`] if converting the line to BNG fails, and
+    /// [`N3gbError::InvalidZoomLevel`] if `zoom` exceeds the maximum supported zoom level.
     pub fn from_line_string_wgs84(
         line: &LineString,
         zoom: u8,
@@ -155,6 +200,16 @@ impl HexCell {
     }
 
     /// Create a HexCell from British National Grid coordinates
+    ///
+    /// # Arguments
+    /// * `coord` - The BNG coordinate (tuple or `Point`) to index.
+    /// * `zoom` - The zoom level (0-15) at which to generate the cell.
+    ///
+    /// # Returns
+    /// The `HexCell` containing the given coordinate.
+    ///
+    /// # Errors
+    /// Returns [`N3gbError::InvalidZoomLevel`] if `zoom` exceeds the maximum supported zoom level.
     ///
     /// # Example
     /// ```
@@ -186,6 +241,18 @@ impl HexCell {
 
     /// Create a HexCell from WGS84 (lon/lat) coordinates
     ///
+    /// # Arguments
+    /// * `coord` - The WGS84 coordinate (tuple or `Point`) to index.
+    /// * `zoom` - The zoom level (0-15) at which to generate the cell.
+    /// * `method` - The coordinate conversion method used to project WGS84 to BNG.
+    ///
+    /// # Returns
+    /// The `HexCell` containing the given coordinate.
+    ///
+    /// # Errors
+    /// Returns [`N3gbError::ProjectionError`] if converting the coordinate to BNG fails, and
+    /// [`N3gbError::InvalidZoomLevel`] if `zoom` exceeds the maximum supported zoom level.
+    ///
     /// # Example
     /// ```
     /// use n3gb_rs::{HexCell, ConversionMethod};
@@ -214,6 +281,20 @@ impl HexCell {
     /// Dispatches on geometry type and CRS to produce one or more cells.
     /// Points and polygon centroids produce a single cell; lines and
     /// collections may produce many.
+    ///
+    /// # Arguments
+    /// * `geom` - The geometry to convert into one or more cells.
+    /// * `zoom` - The zoom level (0-15) at which to generate cells.
+    /// * `crs` - The coordinate reference system of the input geometry.
+    /// * `method` - The coordinate conversion method used to project WGS84 to BNG.
+    ///
+    /// # Returns
+    /// A vector of `HexCell`s derived from the geometry.
+    ///
+    /// # Errors
+    /// Returns [`N3gbError::InvalidZoomLevel`] if `zoom` exceeds the maximum supported zoom level,
+    /// [`N3gbError::ProjectionError`] if a WGS84 coordinate fails to project to BNG, and
+    /// [`N3gbError::GeometryParseError`] if the geometry type is unsupported.
     pub fn from_geometry(
         geom: Geometry<f64>,
         zoom: u8,
@@ -313,6 +394,15 @@ impl HexCell {
     ///
     /// Both cells must be at the same zoom level.
     ///
+    /// # Arguments
+    /// * `other` - The other cell to measure the grid distance to.
+    ///
+    /// # Returns
+    /// The number of hex steps between this cell and `other`.
+    ///
+    /// # Errors
+    /// Returns [`N3gbError::ZoomLevelMismatch`] if the two cells are at different zoom levels.
+    ///
     /// # Example
     ///
     /// ```
@@ -339,11 +429,17 @@ impl HexCell {
     }
 
     /// Returns the easting (x-coordinate) of the cell center in meters.
+    ///
+    /// # Returns
+    /// The easting (x-coordinate) of the cell center in meters.
     pub fn easting(&self) -> f64 {
         self.center.x()
     }
 
     /// Returns the northing (y-coordinate) of the cell center in meters.
+    ///
+    /// # Returns
+    /// The northing (y-coordinate) of the cell center in meters.
     pub fn northing(&self) -> f64 {
         self.center.y()
     }
@@ -352,26 +448,50 @@ impl HexCell {
     ///
     /// Returns a `geo_types::Polygon` representing the hexagon boundary,
     /// suitable for spatial operations or GeoJSON export.
+    ///
+    /// # Returns
+    /// A `geo_types::Polygon` representing the hexagon boundary of this cell.
     pub fn to_polygon(&self) -> Polygon<f64> {
         create_hexagon(&self.center, CELL_RADIUS[self.zoom_level as usize])
     }
 
     /// Converts this cell's center to an Arrow PointArray.
+    ///
+    /// # Returns
+    /// A `PointArray` containing this cell's center point.
     pub fn to_arrow_points(&self) -> PointArray {
         std::slice::from_ref(self).to_arrow_points()
     }
 
     /// Converts this cell to an Arrow PolygonArray.
+    ///
+    /// # Returns
+    /// A `PolygonArray` containing this cell's hexagon polygon.
     pub fn to_arrow_polygons(&self) -> PolygonArray {
         std::slice::from_ref(self).to_arrow_polygons()
     }
 
     /// Converts this cell to an Arrow RecordBatch with all attributes.
+    ///
+    /// # Returns
+    /// A `RecordBatch` containing this cell's attributes and geometry.
+    ///
+    /// # Errors
+    /// Returns [`N3gbError::IoError`] if building the record batch fails.
     pub fn to_record_batch(&self) -> Result<RecordBatch, N3gbError> {
         std::slice::from_ref(self).to_record_batch()
     }
 
     /// Writes this cell to a GeoParquet file.
+    ///
+    /// # Arguments
+    /// * `path` - The filesystem path to write the GeoParquet file to.
+    ///
+    /// # Returns
+    /// `()` on success once the file has been written.
+    ///
+    /// # Errors
+    /// Returns [`N3gbError::IoError`] if writing the GeoParquet file fails.
     pub fn to_geoparquet(&self, path: impl AsRef<Path>) -> Result<(), N3gbError> {
         std::slice::from_ref(self).to_geoparquet(path)
     }

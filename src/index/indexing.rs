@@ -8,6 +8,19 @@ use geo_types::Point;
 /// Converts a BNG coordinate to hex grid row/column indices.
 ///
 /// Returns `(row, col)` for the cell containing the given point at the specified zoom level.
+///
+/// # Arguments
+///
+/// * `coord` - The BNG coordinate to locate.
+/// * `z` - The grid zoom level (must not exceed `MAX_ZOOM_LEVEL`).
+///
+/// # Returns
+///
+/// A `(row, col)` tuple identifying the cell that contains the given point.
+///
+/// # Errors
+///
+/// Returns [`N3gbError::InvalidZoomLevel`] if `z` exceeds `MAX_ZOOM_LEVEL`.
 pub fn point_to_row_col<C: Coordinate>(coord: &C, z: u8) -> Result<(i64, i64), N3gbError> {
     if z > MAX_ZOOM_LEVEL {
         return Err(N3gbError::InvalidZoomLevel(z));
@@ -30,6 +43,20 @@ pub fn point_to_row_col<C: Coordinate>(coord: &C, z: u8) -> Result<(i64, i64), N
 /// Converts hex grid row/column indices to a BNG center point.
 ///
 /// Returns the center point of the cell at the given row, column, and zoom level.
+///
+/// # Arguments
+///
+/// * `row` - The row index of the cell.
+/// * `col` - The column index of the cell.
+/// * `z` - The grid zoom level (must not exceed `MAX_ZOOM_LEVEL`).
+///
+/// # Returns
+///
+/// The BNG center [`Point<f64>`] of the cell at the given row, column, and zoom level.
+///
+/// # Errors
+///
+/// Returns [`N3gbError::InvalidZoomLevel`] if `z` exceeds `MAX_ZOOM_LEVEL`.
 pub fn row_col_to_center(row: i64, col: i64, z: u8) -> Result<Point<f64>, N3gbError> {
     if z > MAX_ZOOM_LEVEL {
         return Err(N3gbError::InvalidZoomLevel(z));
@@ -47,6 +74,15 @@ pub fn row_col_to_center(row: i64, col: i64, z: u8) -> Result<Point<f64>, N3gbEr
 }
 
 /// Converts odd-r offset (row, col) to cube coordinates (q, r, s).
+///
+/// # Arguments
+///
+/// * `row` - The row index in odd-r offset coordinates.
+/// * `col` - The column index in odd-r offset coordinates.
+///
+/// # Returns
+///
+/// A `(q, r, s)` tuple of cube coordinates equivalent to the given offset coordinates.
 pub(crate) fn offset_to_cube(row: i64, col: i64) -> (i64, i64, i64) {
     let q = col - row / 2;
     let r = row;

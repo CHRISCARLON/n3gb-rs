@@ -23,6 +23,18 @@ pub struct HexagonDims {
 }
 
 /// Computes all hexagon dimensions from the side length.
+///
+/// # Arguments
+///
+/// * `a` - The side length of the hexagon (must be positive).
+///
+/// # Returns
+///
+/// A [`HexagonDims`] with all derived measurements computed from the side length.
+///
+/// # Errors
+///
+/// Returns [`N3gbError::InvalidDimension`] if `a` is zero or negative.
 pub fn from_side(a: f64) -> Result<HexagonDims, N3gbError> {
     if a <= 0.0 {
         return Err(N3gbError::InvalidDimension(
@@ -52,11 +64,35 @@ pub fn from_side(a: f64) -> Result<HexagonDims, N3gbError> {
 /// Computes all hexagon dimensions from the circumradius.
 ///
 /// For regular hexagons, circumradius equals side length.
+///
+/// # Arguments
+///
+/// * `r` - The circumradius (center to vertex distance) of the hexagon (must be positive).
+///
+/// # Returns
+///
+/// A [`HexagonDims`] with all derived measurements computed from the circumradius.
+///
+/// # Errors
+///
+/// Returns [`N3gbError::InvalidDimension`] if `r` is zero or negative.
 pub fn from_circumradius(r: f64) -> Result<HexagonDims, N3gbError> {
     from_side(r)
 }
 
 /// Computes all hexagon dimensions from the apothem (inradius).
+///
+/// # Arguments
+///
+/// * `r` - The apothem (center to edge midpoint distance) of the hexagon (must be positive).
+///
+/// # Returns
+///
+/// A [`HexagonDims`] with all derived measurements computed from the apothem.
+///
+/// # Errors
+///
+/// Returns [`N3gbError::InvalidDimension`] if `r` is zero or negative.
 pub fn from_apothem(r: f64) -> Result<HexagonDims, N3gbError> {
     if r <= 0.0 {
         return Err(N3gbError::InvalidDimension(
@@ -70,6 +106,18 @@ pub fn from_apothem(r: f64) -> Result<HexagonDims, N3gbError> {
 }
 
 /// Computes all hexagon dimensions from the across-flats distance.
+///
+/// # Arguments
+///
+/// * `df` - The distance across flats (edge to opposite edge) of the hexagon (must be positive).
+///
+/// # Returns
+///
+/// A [`HexagonDims`] with all derived measurements computed from the across-flats distance.
+///
+/// # Errors
+///
+/// Returns [`N3gbError::InvalidDimension`] if `df` is zero or negative.
 pub fn from_across_flats(df: f64) -> Result<HexagonDims, N3gbError> {
     if df <= 0.0 {
         return Err(N3gbError::InvalidDimension(
@@ -83,6 +131,18 @@ pub fn from_across_flats(df: f64) -> Result<HexagonDims, N3gbError> {
 }
 
 /// Computes all hexagon dimensions from the across-corners distance.
+///
+/// # Arguments
+///
+/// * `dc` - The distance across corners (vertex to opposite vertex) of the hexagon (must be positive).
+///
+/// # Returns
+///
+/// A [`HexagonDims`] with all derived measurements computed from the across-corners distance.
+///
+/// # Errors
+///
+/// Returns [`N3gbError::InvalidDimension`] if `dc` is zero or negative.
 pub fn from_across_corners(dc: f64) -> Result<HexagonDims, N3gbError> {
     if dc <= 0.0 {
         return Err(N3gbError::InvalidDimension(
@@ -95,6 +155,18 @@ pub fn from_across_corners(dc: f64) -> Result<HexagonDims, N3gbError> {
 }
 
 /// Computes all hexagon dimensions from the area.
+///
+/// # Arguments
+///
+/// * `area` - The total area of the hexagon (must be positive).
+///
+/// # Returns
+///
+/// A [`HexagonDims`] with all derived measurements computed from the area.
+///
+/// # Errors
+///
+/// Returns [`N3gbError::InvalidDimension`] if `area` is zero or negative.
 pub fn from_area(area: f64) -> Result<HexagonDims, N3gbError> {
     if area <= 0.0 {
         return Err(N3gbError::InvalidDimension(
@@ -110,6 +182,19 @@ pub fn from_area(area: f64) -> Result<HexagonDims, N3gbError> {
 /// Returns the bounding box dimensions (width, height) for a hexagon.
 ///
 /// - `pointy_top`: If true, hexagon has vertices at top/bottom; if false, flat edges at top/bottom.
+///
+/// # Arguments
+///
+/// * `a` - The side length of the hexagon (must be positive).
+/// * `pointy_top` - If true, the hexagon has vertices at top/bottom; if false, flat edges at top/bottom.
+///
+/// # Returns
+///
+/// A `(width, height)` tuple giving the bounding box dimensions.
+///
+/// # Errors
+///
+/// Returns [`N3gbError::InvalidDimension`] if `a` is zero or negative.
 pub fn bounding_box(a: f64, pointy_top: bool) -> Result<(f64, f64), N3gbError> {
     if a <= 0.0 {
         return Err(N3gbError::InvalidDimension(

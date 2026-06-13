@@ -5,8 +5,18 @@ use proj::Proj;
 use rayon::prelude::*;
 use std::cell::RefCell;
 
-/// Dispatch helper functions
 /// Select conversion backend at runtime based on [`ConversionMethod`].
+///
+/// # Arguments
+/// * `coord` - The WGS84 (longitude, latitude) coordinate to convert.
+/// * `method` - Which conversion backend to use.
+///
+/// # Returns
+/// The coordinate reprojected to British National Grid as a [`Point<f64>`].
+///
+/// # Errors
+/// Returns [`N3gbError::ProjectionError`] if the underlying PROJ or OSTN15
+/// conversion fails.
 pub(crate) fn convert_to_bng<C: super::Coordinate>(
     coord: &C,
     method: ConversionMethod,
@@ -17,6 +27,18 @@ pub(crate) fn convert_to_bng<C: super::Coordinate>(
     }
 }
 
+/// Reproject a [`LineString`] from WGS84 to British National Grid.
+///
+/// # Arguments
+/// * `line` - The WGS84 (longitude, latitude) line to convert.
+/// * `method` - Which conversion backend to use.
+///
+/// # Returns
+/// The line reprojected to British National Grid.
+///
+/// # Errors
+/// Returns [`N3gbError::ProjectionError`] if the underlying PROJ or OSTN15
+/// conversion fails for any vertex.
 pub(crate) fn convert_line_to_bng(
     line: &LineString,
     method: ConversionMethod,
@@ -27,6 +49,18 @@ pub(crate) fn convert_line_to_bng(
     }
 }
 
+/// Reproject a [`Polygon`] from WGS84 to British National Grid.
+///
+/// # Arguments
+/// * `polygon` - The WGS84 (longitude, latitude) polygon to convert.
+/// * `method` - Which conversion backend to use.
+///
+/// # Returns
+/// The polygon reprojected to British National Grid.
+///
+/// # Errors
+/// Returns [`N3gbError::ProjectionError`] if the underlying PROJ or OSTN15
+/// conversion fails for any vertex.
 pub(crate) fn convert_polygon_to_bng(
     polygon: &Polygon<f64>,
     method: ConversionMethod,
@@ -37,6 +71,18 @@ pub(crate) fn convert_polygon_to_bng(
     }
 }
 
+/// Reproject a [`MultiPolygon`] from WGS84 to British National Grid.
+///
+/// # Arguments
+/// * `multipolygon` - The WGS84 (longitude, latitude) multipolygon to convert.
+/// * `method` - Which conversion backend to use.
+///
+/// # Returns
+/// The multipolygon reprojected to British National Grid.
+///
+/// # Errors
+/// Returns [`N3gbError::ProjectionError`] if the underlying PROJ or OSTN15
+/// conversion fails for any vertex.
 pub(crate) fn convert_multipolygon_to_bng(
     multipolygon: &MultiPolygon<f64>,
     method: ConversionMethod,
@@ -52,6 +98,18 @@ thread_local! {
     static WGS84_TO_BNG_PROJ_OBJECT: RefCell<Option<Proj>> = const { RefCell::new(None) };
 }
 
+/// Run a closure with the thread-local WGS84-to-BNG PROJ object, creating it on
+/// first use.
+///
+/// # Arguments
+/// * `proj_closure` - Closure invoked with a reference to the cached [`Proj`] object.
+///
+/// # Returns
+/// The value returned by `proj_closure`.
+///
+/// # Errors
+/// Returns [`N3gbError::ProjectionError`] if the [`Proj`] object cannot be
+/// constructed, or propagates any [`N3gbError`] returned by `proj_closure`.
 fn with_wgs84_to_bng_proj<T, F>(proj_closure: F) -> Result<T, N3gbError>
 where
     F: FnOnce(&Proj) -> Result<T, N3gbError>,
@@ -84,6 +142,15 @@ where
 /// Look for `uk_os_OSTN15_NTv2_OSGBtoETRS.tif - succeeded` (grid active)
 /// or `OSGB 1936 to WGS 84 (6)` (Helmert fallback).
 ///
+/// # Arguments
+/// * `coord` - The WGS84 (longitude, latitude) coordinate to convert.
+///
+/// # Returns
+/// The coordinate reprojected to British National Grid as a [`Point<f64>`].
+///
+/// # Errors
+/// Returns [`N3gbError::ProjectionError`] if the PROJ object cannot be built or
+/// the conversion fails.
 pub(crate) fn wgs84_to_bng<C: super::Coordinate>(coord: &C) -> Result<Point<f64>, N3gbError> {
     with_wgs84_to_bng_proj(|proj| {
         let (easting, northing) = proj
@@ -93,6 +160,17 @@ pub(crate) fn wgs84_to_bng<C: super::Coordinate>(coord: &C) -> Result<Point<f64>
     })
 }
 
+/// Reproject a [`LineString`] from WGS84 to British National Grid using PROJ.
+///
+/// # Arguments
+/// * `line` - The WGS84 (longitude, latitude) line to convert.
+///
+/// # Returns
+/// The line reprojected to British National Grid.
+///
+/// # Errors
+/// Returns [`N3gbError::ProjectionError`] if the PROJ object cannot be built or
+/// the conversion fails for any vertex.
 pub(crate) fn wgs84_line_to_bng(line: &LineString) -> Result<LineString, N3gbError> {
     let coords: Result<Vec<Coord>, N3gbError> = line
         .0
@@ -109,6 +187,17 @@ pub(crate) fn wgs84_line_to_bng(line: &LineString) -> Result<LineString, N3gbErr
     Ok(LineString::new(coords?))
 }
 
+/// Reproject a [`Polygon`] from WGS84 to British National Grid using PROJ.
+///
+/// # Arguments
+/// * `polygon` - The WGS84 (longitude, latitude) polygon to convert.
+///
+/// # Returns
+/// The polygon reprojected to British National Grid.
+///
+/// # Errors
+/// Returns [`N3gbError::ProjectionError`] if the PROJ object cannot be built or
+/// the conversion fails for any vertex.
 pub(crate) fn wgs84_polygon_to_bng(polygon: &Polygon<f64>) -> Result<Polygon<f64>, N3gbError> {
     let exterior = wgs84_line_to_bng(polygon.exterior())?;
     let interiors: Result<Vec<LineString>, N3gbError> =
@@ -116,6 +205,17 @@ pub(crate) fn wgs84_polygon_to_bng(polygon: &Polygon<f64>) -> Result<Polygon<f64
     Ok(Polygon::new(exterior, interiors?))
 }
 
+/// Reproject a [`MultiPolygon`] from WGS84 to British National Grid using PROJ.
+///
+/// # Arguments
+/// * `multipolygon` - The WGS84 (longitude, latitude) multipolygon to convert.
+///
+/// # Returns
+/// The multipolygon reprojected to British National Grid.
+///
+/// # Errors
+/// Returns [`N3gbError::ProjectionError`] if the PROJ object cannot be built or
+/// the conversion fails for any vertex.
 pub(crate) fn wgs84_multipolygon_to_bng(
     multipolygon: &MultiPolygon<f64>,
 ) -> Result<MultiPolygon<f64>, N3gbError> {
@@ -129,6 +229,14 @@ pub(crate) fn wgs84_multipolygon_to_bng(
 /// Uses the `lonlat_bng` crate with embedded OSTN15 grid shift data.
 /// No system PROJ library required. Suitable for surveying-grade accuracy.
 ///
+/// # Arguments
+/// * `coord` - The WGS84 (longitude, latitude) coordinate to convert.
+///
+/// # Returns
+/// The coordinate reprojected to British National Grid as a [`Point<f64>`].
+///
+/// # Errors
+/// Returns [`N3gbError::ProjectionError`] if the OSTN15 conversion fails.
 pub(crate) fn wgs84_to_bng_ostn15<C: super::Coordinate>(
     coord: &C,
 ) -> Result<Point<f64>, N3gbError> {
@@ -137,6 +245,17 @@ pub(crate) fn wgs84_to_bng_ostn15<C: super::Coordinate>(
         .map_err(|_| N3gbError::ProjectionError("OSTN15 conversion failed".into()))
 }
 
+/// Reproject a [`LineString`] from WGS84 to British National Grid using OSTN15.
+///
+/// # Arguments
+/// * `line` - The WGS84 (longitude, latitude) line to convert.
+///
+/// # Returns
+/// The line reprojected to British National Grid.
+///
+/// # Errors
+/// Returns [`N3gbError::ProjectionError`] if the OSTN15 conversion fails for any
+/// vertex.
 pub(crate) fn wgs84_line_to_bng_ostn15(line: &LineString) -> Result<LineString, N3gbError> {
     let coords: Result<Vec<Coord>, N3gbError> = line
         .0
@@ -150,6 +269,17 @@ pub(crate) fn wgs84_line_to_bng_ostn15(line: &LineString) -> Result<LineString, 
     Ok(LineString::new(coords?))
 }
 
+/// Reproject a [`Polygon`] from WGS84 to British National Grid using OSTN15.
+///
+/// # Arguments
+/// * `polygon` - The WGS84 (longitude, latitude) polygon to convert.
+///
+/// # Returns
+/// The polygon reprojected to British National Grid.
+///
+/// # Errors
+/// Returns [`N3gbError::ProjectionError`] if the OSTN15 conversion fails for any
+/// vertex.
 pub(crate) fn wgs84_polygon_to_bng_ostn15(
     polygon: &Polygon<f64>,
 ) -> Result<Polygon<f64>, N3gbError> {
@@ -162,6 +292,17 @@ pub(crate) fn wgs84_polygon_to_bng_ostn15(
     Ok(Polygon::new(exterior, interiors?))
 }
 
+/// Reproject a [`MultiPolygon`] from WGS84 to British National Grid using OSTN15.
+///
+/// # Arguments
+/// * `multipolygon` - The WGS84 (longitude, latitude) multipolygon to convert.
+///
+/// # Returns
+/// The multipolygon reprojected to British National Grid.
+///
+/// # Errors
+/// Returns [`N3gbError::ProjectionError`] if the OSTN15 conversion fails for any
+/// vertex.
 pub(crate) fn wgs84_multipolygon_to_bng_ostn15(
     multipolygon: &MultiPolygon<f64>,
 ) -> Result<MultiPolygon<f64>, N3gbError> {

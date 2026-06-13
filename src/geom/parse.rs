@@ -7,6 +7,19 @@ use wkt::Wkt;
 /// Parses a geometry string, auto-detecting WKT or GeoJSON format.
 ///
 /// GeoJSON is detected by a leading `{`, everything else is tried as WKT.
+///
+/// # Arguments
+///
+/// * `s` - The geometry string to parse, in either WKT or GeoJSON format.
+///
+/// # Returns
+///
+/// The parsed [`Geometry<f64>`].
+///
+/// # Errors
+///
+/// Returns [`N3gbError::GeometryParseError`] if the string cannot be parsed as
+/// valid WKT or GeoJSON.
 pub fn parse_geometry(s: &str) -> Result<Geometry<f64>, N3gbError> {
     let trimmed = s.trim();
     if trimmed.starts_with('{') {
@@ -17,6 +30,20 @@ pub fn parse_geometry(s: &str) -> Result<Geometry<f64>, N3gbError> {
 }
 
 /// Parses a GeoJSON string into a `geo_types::Geometry`.
+///
+/// # Arguments
+///
+/// * `s` - The GeoJSON string to parse (a `Geometry` or `Feature` object).
+///
+/// # Returns
+///
+/// The parsed [`Geometry<f64>`].
+///
+/// # Errors
+///
+/// Returns [`N3gbError::GeometryParseError`] if the string is not valid GeoJSON,
+/// if a `Feature` has no geometry, or if the input is a `FeatureCollection`
+/// (which is not supported).
 pub fn parse_geojson(s: &str) -> Result<Geometry<f64>, N3gbError> {
     let geojson: GeoJson = s
         .parse()
@@ -39,6 +66,19 @@ pub fn parse_geojson(s: &str) -> Result<Geometry<f64>, N3gbError> {
 }
 
 /// Parses a WKT string into a `geo_types::Geometry`.
+///
+/// # Arguments
+///
+/// * `s` - The WKT string to parse.
+///
+/// # Returns
+///
+/// The parsed [`Geometry<f64>`].
+///
+/// # Errors
+///
+/// Returns [`N3gbError::GeometryParseError`] if the string is not valid WKT or
+/// cannot be converted into a geometry.
 pub fn parse_wkt(s: &str) -> Result<Geometry<f64>, N3gbError> {
     let wkt: Wkt<f64> =
         Wkt::from_str(s).map_err(|e| N3gbError::GeometryParseError(e.to_string()))?;

@@ -7,6 +7,16 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 ///
 /// The identifier is a URL-safe Base64 string encoding a 19-byte binary structure.
 ///
+/// # Arguments
+///
+/// * `easting` - The BNG easting coordinate.
+/// * `northing` - The BNG northing coordinate.
+/// * `zoom_level` - The grid zoom level (0-15).
+///
+/// # Returns
+///
+/// A URL-safe Base64 `String` (no padding) encoding the 19-byte identifier.
+///
 /// # Binary Format
 ///
 /// The identifier encodes the following data in big-endian byte order:
@@ -53,6 +63,10 @@ pub fn generate_hex_identifier(easting: f64, northing: f64, zoom_level: u8) -> S
 ///
 /// Parses the URL-safe Base64 identifier and extracts the original BNG coordinates
 /// and zoom level.
+///
+/// # Arguments
+///
+/// * `identifier` - The URL-safe Base64 hex cell identifier to decode.
 ///
 /// # Process
 ///

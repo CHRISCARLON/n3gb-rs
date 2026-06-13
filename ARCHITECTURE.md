@@ -4,20 +4,19 @@ THIS WAS CREATED BY CLAUDE AND REVIEWED BY CHRIS CARLON.
 
 I will change this as and when things spring to mind.
 
-A guided tour of how `n3gb-rs` works internally, and a cookbook for changing and
-extending it. If you're new to the codebase, read this top to bottom once, then
-keep section 9 ("How to extend it") nearby while you work.
+A guided on how `n3gb-rs` works internally, and a cookbook for changing and
+extending it. 
 
 ## The one-paragraph mental model
 
 A coordinate — either British National Grid (BNG / EPSG:27700) easting/northing,
 or WGS84 lon/lat that gets **projected to BNG first** — is mapped to an integer
 `(row, col)` on an offset hexagon lattice. The lattice spacing comes from per-zoom
-constant tables. That `(row, col)` yields a hexagon **center**, and the center +
+constant tables. That `(row, col)` yields a hexagon **center** point, and the center +
 zoom level is encoded into a 19-byte, checksummed, URL-safe Base64 **id**. A
 `HexCell` is one such cell; a `HexGrid` is a collected, spatially-indexed
 `Vec<HexCell>`. Everything else in the crate is either (a) turning geometry into
-cells, or (b) turning cells into output (Arrow / GeoParquet / CSV).
+cells, or (b) turning cells into an output (Arrow / GeoParquet / CSV).
 
 > **Important:** unlike H3, the n3gb index is **not hierarchical**. Each zoom level
 > is an independent lattice — there is no built-in parent/child relationship

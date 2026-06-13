@@ -12,6 +12,21 @@ use std::path::Path;
 /// Writes an Arrow RecordBatch to a GeoParquet file.
 ///
 /// The batch should contain a geometry column (normally from [`HexCellsToArrow::to_record_batch`]).
+///
+/// # Arguments
+///
+/// * `batch` - The Arrow [`RecordBatch`] to encode, containing a geometry column.
+/// * `path` - Filesystem path where the GeoParquet file is written.
+///
+/// # Returns
+///
+/// `()` on success, after the GeoParquet file has been fully written and finalized.
+///
+/// # Errors
+///
+/// Returns [`N3gbError::IoError`] if the GeoParquet encoder cannot be created, if the
+/// batch cannot be encoded, if the key-value metadata cannot be produced, or if the
+/// underlying file cannot be created or written (via `From<io::Error>` / `From<ParquetError>`).
 pub fn write_geoparquet(batch: &RecordBatch, path: impl AsRef<Path>) -> Result<(), N3gbError> {
     let schema = batch.schema();
 
@@ -46,6 +61,20 @@ pub fn write_geoparquet(batch: &RecordBatch, path: impl AsRef<Path>) -> Result<(
 /// Implemented for any type that dereferences to `[HexCell]` (e.g. `Vec<HexCell>`, `&[HexCell]`).
 pub trait HexCellsToGeoParquet: HexCellsToArrow {
     /// Writes cells to a GeoParquet file at the given path.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Filesystem path where the GeoParquet file is written.
+    ///
+    /// # Returns
+    ///
+    /// `()` on success, after the cells have been written to the GeoParquet file.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`N3gbError::IoError`] if the record batch cannot be built or if the
+    /// GeoParquet file cannot be encoded or written (via `From<ArrowError>` /
+    /// `From<ParquetError>` / `From<io::Error>`).
     fn to_geoparquet(&self, path: impl AsRef<Path>) -> Result<(), N3gbError>;
 }
 
