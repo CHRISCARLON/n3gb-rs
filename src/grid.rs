@@ -1,6 +1,6 @@
 use crate::cell::HexCell;
 use crate::coord::{
-    Coordinate, ConversionMethod, convert_multipolygon_to_bng, convert_polygon_to_bng,
+    ConversionMethod, Coordinate, convert_multipolygon_to_bng, convert_polygon_to_bng,
     convert_to_bng,
 };
 use crate::error::N3gbError;
@@ -222,7 +222,11 @@ impl HexGrid {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn from_wgs84_polygon(polygon: &Polygon<f64>, zoom_level: u8, method: ConversionMethod) -> Result<Self, N3gbError> {
+    pub fn from_wgs84_polygon(
+        polygon: &Polygon<f64>,
+        zoom_level: u8,
+        method: ConversionMethod,
+    ) -> Result<Self, N3gbError> {
         let bng_polygon = convert_polygon_to_bng(polygon, method)?;
         Self::from_bng_polygon(&bng_polygon, zoom_level)
     }

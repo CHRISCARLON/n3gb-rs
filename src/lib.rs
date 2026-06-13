@@ -204,7 +204,7 @@ mod index;
 mod io;
 
 pub use cell::HexCell;
-pub use coord::{Coordinate, ConversionMethod, Crs};
+pub use coord::{ConversionMethod, Coordinate, Crs};
 pub use dimensions::{
     HexagonDims, bounding_box, from_across_corners, from_across_flats, from_apothem, from_area,
     from_circumradius, from_side,
@@ -216,8 +216,8 @@ pub use index::{
     decode_hex_identifier, generate_hex_identifier, point_to_row_col, row_col_to_center,
 };
 pub use io::{
-    CoordinateSource, CsvHexConfig, GeometryFormat, HexCellsToArrow,
-    HexCellsToGeoParquet, csv_to_hex_csv, write_geoparquet,
+    CoordinateSource, CsvHexConfig, GeometryFormat, HexCellsToArrow, HexCellsToGeoParquet,
+    csv_to_hex_csv, write_geoparquet,
 };
 
 pub use geom::{create_hexagon, parse_geometry};
