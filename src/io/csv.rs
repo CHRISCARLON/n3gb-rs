@@ -146,7 +146,7 @@ impl CsvHexConfig {
 
     /// Sets the WGS84→BNG conversion backend.
     ///
-    /// Only relevant when `crs` is [`Crs::Wgs84`]. Defaults to [`ConversionMethod::Proj`].
+    /// Only relevant when `crs` is [`Crs::Wgs84`]. Defaults to [`ConversionMethod::Ostn15`].
     ///
     /// # Arguments
     /// * `method` - The [`ConversionMethod`] backend used to convert WGS84 to BNG.

@@ -101,14 +101,14 @@
 //!
 //! | Concept                  | n3gb-rs                                  |
 //! | :----------------------- | :--------------------------------------- |
-//! | Get zoom level           | `HexCell::zoom_level`                    |
-//! | Get cell ID              | `HexCell::id`                            |
-//! | Get center point         | `HexCell::center`                        |
-//! | Get easting              | `HexCell::easting`                       |
-//! | Get northing             | `HexCell::northing`                      |
-//! | Get row index            | `HexCell::row`                           |
-//! | Get column index         | `HexCell::col`                           |
-//! | Cell to polygon          | `HexCell::to_polygon`                    |
+//! | Get zoom level           | `cell.zoom_level` (field)                |
+//! | Get cell ID              | `cell.id` (field)                        |
+//! | Get center point         | `cell.center` (field)                    |
+//! | Get easting              | `cell.easting()`                         |
+//! | Get northing             | `cell.northing()`                        |
+//! | Get row index            | `cell.row` (field)                       |
+//! | Get column index         | `cell.col` (field)                       |
+//! | Cell to polygon          | `cell.to_polygon()`                      |
 //!
 //! ### Grid functions
 //!
@@ -134,14 +134,9 @@
 //! | Line to cells (BNG)      | `HexCell::from_line_string_bng`          |
 //! | Line to cells (WGS84)    | `HexCell::from_line_string_wgs84`        |
 //!
-//! ### Coordinate transformation functions
-//!
-//! | Concept                   | n3gb-rs                                 |
-//! | :------------------------ | :-------------------------------------- |
-//! | WGS84 to BNG point        | `wgs84_to_bng`                          |
-//! | WGS84 to BNG polygon      | `wgs84_polygon_to_bng`                  |
-//! | WGS84 to BNG multipolygon | `wgs84_multipolygon_to_bng`             |
-//! | WGS84 to BNG line         | `wgs84_line_to_bng`                     |
+//! WGS84 input is reprojected to BNG internally; reach it via the `from_wgs84*`
+//! constructors or by setting [`Crs::Wgs84`]. There is no public standalone
+//! transformation function.
 //!
 //! ### Hexagon dimension functions
 //!

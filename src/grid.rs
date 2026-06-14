@@ -621,7 +621,7 @@ impl IntoIterator for HexGrid {
 
 /// Builder for constructing a [`HexGrid`].
 ///
-/// Remeber that the builder struct is there to collect and normalise inputs (converting to BNG if needed)
+/// Remember that the builder struct is there to collect and normalise inputs (converting to BNG if needed)
 /// then .build() passes the final object into the HexGrid constructors
 /// this does the actual work — generating cells, filtering, building the HashMap index, etc.
 ///
@@ -679,7 +679,7 @@ impl HexGridBuilder {
     /// Sets the WGS84→BNG conversion backend.
     ///
     /// Must be called before any `wgs84_*` input method.
-    /// Defaults to [`ConversionMethod::Proj`].
+    /// Defaults to [`ConversionMethod::Ostn15`].
     ///
     /// # Arguments
     ///
