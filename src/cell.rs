@@ -97,13 +97,13 @@ impl HexCell {
     /// # }
     /// ```
     pub fn from_hex_id(id: &str) -> Result<Self, N3gbError> {
-        let (_, easting, northing, zoom) = decode_hex_identifier(id)?;
-        let (row, col) = point_to_row_col(&(easting, northing), zoom)?;
+        let (_, easting, northing, zoom_level) = decode_hex_identifier(id)?;
+        let (row, col) = point_to_row_col(&(easting, northing), zoom_level)?;
 
         Ok(Self {
             id: id.to_string(),
             center: Point::new(easting, northing),
-            zoom_level: zoom,
+            zoom_level,
             row,
             col,
         })
@@ -115,18 +115,18 @@ impl HexCell {
     ///
     /// # Arguments
     /// * `line` - The line in British National Grid coordinates to sample.
-    /// * `zoom` - The zoom level (0-15) at which to generate cells.
+    /// * `zoom_level` - The zoom level (0-15) at which to generate cells.
     ///
     /// # Returns
     /// A vector of unique `HexCell`s that the line passes through.
     ///
     /// # Errors
-    /// Returns [`N3gbError::InvalidZoomLevel`] if `zoom` exceeds the maximum supported zoom level.
-    pub fn from_line_string_bng(line: &LineString, zoom: u8) -> Result<Vec<Self>, N3gbError> {
-        if zoom > crate::index::MAX_ZOOM_LEVEL {
-            return Err(N3gbError::InvalidZoomLevel(zoom));
+    /// Returns [`N3gbError::InvalidZoomLevel`] if `zoom_level` exceeds the maximum supported zoom level.
+    pub fn from_line_string_bng(line: &LineString, zoom_level: u8) -> Result<Vec<Self>, N3gbError> {
+        if zoom_level > crate::index::MAX_ZOOM_LEVEL {
+            return Err(N3gbError::InvalidZoomLevel(zoom_level));
         }
-        let cell_radius = CELL_RADIUS[zoom as usize];
+        let cell_radius = CELL_RADIUS[zoom_level as usize];
         let step_size = cell_radius * 0.5;
 
         let total_length: f64 = line
@@ -139,11 +139,13 @@ impl HexCell {
             })
             .sum();
 
+        // We add this so that we can create the hashset with a known size
         let estimated_cells = ((total_length / cell_radius) * 1.5) as usize + line.0.len();
-
         let mut seen: HashSet<(i64, i64)> = HashSet::with_capacity(estimated_cells);
         let mut cells: Vec<HexCell> = Vec::with_capacity(estimated_cells);
 
+        // For each segment pair
+        // [A,B], [B,C], [C,D], etc
         for window in line.0.windows(2) {
             let start = &window[0];
             let end = &window[1];
@@ -153,6 +155,8 @@ impl HexCell {
             let segment_length = (dx * dx + dy * dy).sqrt();
             let steps = (segment_length / step_size).ceil() as usize;
 
+            // Get the points in each segment
+            // Get their HexCells
             for i in 0..=steps {
                 let t = if steps == 0 {
                     0.0
@@ -162,12 +166,15 @@ impl HexCell {
                 let x = start.x + t * dx;
                 let y = start.y + t * dy;
 
-                let (row, col) = point_to_row_col(&(x, y), zoom)?;
+                let (row, col) = point_to_row_col(&(x, y), zoom_level)?;
 
-                if seen.insert((row, col)) {
-                    let center = row_col_to_center(row, col, zoom)?;
-                    let id = generate_hex_identifier(center.x(), center.y(), zoom);
-                    cells.push(HexCell::new(id, center, zoom, row, col));
+                // true = first time we've hit this hex along the line
+                // acts as a way to not let duplicates in
+                let is_new_cell = seen.insert((row, col));
+                if is_new_cell {
+                    let center = row_col_to_center(row, col, zoom_level)?;
+                    let id = generate_hex_identifier(center.x(), center.y(), zoom_level);
+                    cells.push(HexCell::new(id, center, zoom_level, row, col));
                 }
             }
         }
@@ -181,7 +188,7 @@ impl HexCell {
     ///
     /// # Arguments
     /// * `line` - The line in WGS84 (lon/lat) coordinates to sample.
-    /// * `zoom` - The zoom level (0-15) at which to generate cells.
+    /// * `zoom_level` - The zoom level (0-15) at which to generate cells.
     /// * `method` - The coordinate conversion method used to project WGS84 to BNG.
     ///
     /// # Returns
@@ -189,27 +196,30 @@ impl HexCell {
     ///
     /// # Errors
     /// Returns [`N3gbError::ProjectionError`] if converting the line to BNG fails, and
-    /// [`N3gbError::InvalidZoomLevel`] if `zoom` exceeds the maximum supported zoom level.
+    /// [`N3gbError::InvalidZoomLevel`] if `zoom_level` exceeds the maximum supported zoom level.
     pub fn from_line_string_wgs84(
         line: &LineString,
-        zoom: u8,
+        zoom_level: u8,
         method: ConversionMethod,
     ) -> Result<Vec<Self>, N3gbError> {
         let bng_line = convert_line_to_bng(line, method)?;
-        Self::from_line_string_bng(&bng_line, zoom)
+        Self::from_line_string_bng(&bng_line, zoom_level)
     }
 
     /// Create a HexCell from British National Grid coordinates
     ///
+    /// Use this when you have a known BNG point. For arbitrary or parsed geometry
+    /// whose type is only known at runtime, use [`HexCell::from_geometry`].
+    ///
     /// # Arguments
     /// * `coord` - The BNG coordinate (tuple or `Point`) to index.
-    /// * `zoom` - The zoom level (0-15) at which to generate the cell.
+    /// * `zoom_level` - The zoom level (0-15) at which to generate the cell.
     ///
     /// # Returns
     /// The `HexCell` containing the given coordinate.
     ///
     /// # Errors
-    /// Returns [`N3gbError::InvalidZoomLevel`] if `zoom` exceeds the maximum supported zoom level.
+    /// Returns [`N3gbError::InvalidZoomLevel`] if `zoom_level` exceeds the maximum supported zoom level.
     ///
     /// # Example
     /// ```
@@ -225,15 +235,15 @@ impl HexCell {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn from_bng(coord: &impl Coordinate, zoom: u8) -> Result<Self, N3gbError> {
-        let (row, col) = point_to_row_col(coord, zoom)?;
-        let center = row_col_to_center(row, col, zoom)?;
-        let id = generate_hex_identifier(center.x(), center.y(), zoom);
+    pub fn from_bng(coord: &impl Coordinate, zoom_level: u8) -> Result<Self, N3gbError> {
+        let (row, col) = point_to_row_col(coord, zoom_level)?;
+        let center = row_col_to_center(row, col, zoom_level)?;
+        let id = generate_hex_identifier(center.x(), center.y(), zoom_level);
 
         Ok(Self {
             id,
             center,
-            zoom_level: zoom,
+            zoom_level,
             row,
             col,
         })
@@ -241,9 +251,12 @@ impl HexCell {
 
     /// Create a HexCell from WGS84 (lon/lat) coordinates
     ///
+    /// Use this when you have a known WGS84 point. For arbitrary or parsed geometry
+    /// whose type is only known at runtime, use [`HexCell::from_geometry`].
+    ///
     /// # Arguments
     /// * `coord` - The WGS84 coordinate (tuple or `Point`) to index.
-    /// * `zoom` - The zoom level (0-15) at which to generate the cell.
+    /// * `zoom_level` - The zoom level (0-15) at which to generate the cell.
     /// * `method` - The coordinate conversion method used to project WGS84 to BNG.
     ///
     /// # Returns
@@ -251,7 +264,7 @@ impl HexCell {
     ///
     /// # Errors
     /// Returns [`N3gbError::ProjectionError`] if converting the coordinate to BNG fails, and
-    /// [`N3gbError::InvalidZoomLevel`] if `zoom` exceeds the maximum supported zoom level.
+    /// [`N3gbError::InvalidZoomLevel`] if `zoom_level` exceeds the maximum supported zoom level.
     ///
     /// # Example
     /// ```
@@ -269,35 +282,47 @@ impl HexCell {
     /// ```
     pub fn from_wgs84(
         coord: &impl Coordinate,
-        zoom: u8,
+        zoom_level: u8,
         method: ConversionMethod,
     ) -> Result<Self, N3gbError> {
         let bng = convert_to_bng(coord, method)?;
-        Self::from_bng(&bng, zoom)
+        Self::from_bng(&bng, zoom_level)
     }
 
     /// Create HexCells from an arbitrary `geo_types::Geometry`.
     ///
-    /// Dispatches on geometry type and CRS to produce one or more cells.
-    /// Points and polygon centroids produce a single cell; lines and
-    /// collections may produce many.
+    /// This is the general-purpose dispatcher for input whose type is only known
+    /// at runtime — for example geometry produced by [`parse_geometry`] from WKT or
+    /// GeoJSON. It matches on the geometry type and `crs`, then delegates to the
+    /// typed constructors below. When you already know the input type, prefer the
+    /// direct constructors instead: [`HexCell::from_bng`] / [`HexCell::from_wgs84`]
+    /// for points and [`HexCell::from_line_string_bng`] /
+    /// [`HexCell::from_line_string_wgs84`] for lines. They are more ergonomic (no
+    /// `Geometry` wrapper, no `crs` flag) and the point constructors return a single
+    /// `HexCell` rather than a `Vec`.
     ///
     /// # Arguments
     /// * `geom` - The geometry to convert into one or more cells.
-    /// * `zoom` - The zoom level (0-15) at which to generate cells.
+    /// * `zoom_level` - The zoom level (0-15) at which to generate cells.
     /// * `crs` - The coordinate reference system of the input geometry.
     /// * `method` - The coordinate conversion method used to project WGS84 to BNG.
     ///
     /// # Returns
-    /// A vector of `HexCell`s derived from the geometry.
+    /// A vector of `HexCell`s derived from the geometry. The result is **always** a
+    /// `Vec`, even for single-cell inputs: a `Point`, or a `Polygon`/`MultiPolygon`
+    /// (each reduced to its centroid), yields one cell per geometry, while lines,
+    /// multi-geometries, and collections may yield many. An empty `Polygon` (no
+    /// centroid) contributes no cells.
+    ///
+    /// [`parse_geometry`]: crate::parse_geometry
     ///
     /// # Errors
-    /// Returns [`N3gbError::InvalidZoomLevel`] if `zoom` exceeds the maximum supported zoom level,
+    /// Returns [`N3gbError::InvalidZoomLevel`] if `zoom_level` exceeds the maximum supported zoom level,
     /// [`N3gbError::ProjectionError`] if a WGS84 coordinate fails to project to BNG, and
     /// [`N3gbError::GeometryParseError`] if the geometry type is unsupported.
     pub fn from_geometry(
         geom: Geometry<f64>,
-        zoom: u8,
+        zoom_level: u8,
         crs: Crs,
         method: ConversionMethod,
     ) -> Result<Vec<Self>, N3gbError> {
@@ -306,18 +331,18 @@ impl HexCell {
                 let cell = match crs {
                     Crs::Wgs84 => {
                         let bng = convert_to_bng(&pt, method)?;
-                        Self::from_bng(&bng, zoom)?
+                        Self::from_bng(&bng, zoom_level)?
                     }
-                    Crs::Bng => Self::from_bng(&pt, zoom)?,
+                    Crs::Bng => Self::from_bng(&pt, zoom_level)?,
                 };
                 Ok(vec![cell])
             }
             Geometry::LineString(line) => match crs {
                 Crs::Wgs84 => {
                     let bng_line = convert_line_to_bng(&line, method)?;
-                    Self::from_line_string_bng(&bng_line, zoom)
+                    Self::from_line_string_bng(&bng_line, zoom_level)
                 }
-                Crs::Bng => Self::from_line_string_bng(&line, zoom),
+                Crs::Bng => Self::from_line_string_bng(&line, zoom_level),
             },
             Geometry::MultiLineString(mls) => {
                 let mut all_cells = Vec::new();
@@ -325,9 +350,9 @@ impl HexCell {
                     let cells = match crs {
                         Crs::Wgs84 => {
                             let bng_line = convert_line_to_bng(&line, method)?;
-                            Self::from_line_string_bng(&bng_line, zoom)?
+                            Self::from_line_string_bng(&bng_line, zoom_level)?
                         }
-                        Crs::Bng => Self::from_line_string_bng(&line, zoom)?,
+                        Crs::Bng => Self::from_line_string_bng(&line, zoom_level)?,
                     };
                     all_cells.extend(cells);
                 }
@@ -338,9 +363,9 @@ impl HexCell {
                     let cell = match crs {
                         Crs::Wgs84 => {
                             let bng = convert_to_bng(&centroid, method)?;
-                            Self::from_bng(&bng, zoom)?
+                            Self::from_bng(&bng, zoom_level)?
                         }
-                        Crs::Bng => Self::from_bng(&centroid, zoom)?,
+                        Crs::Bng => Self::from_bng(&centroid, zoom_level)?,
                     };
                     Ok(vec![cell])
                 } else {
@@ -354,9 +379,9 @@ impl HexCell {
                         let cell = match crs {
                             Crs::Wgs84 => {
                                 let bng = convert_to_bng(&centroid, method)?;
-                                Self::from_bng(&bng, zoom)?
+                                Self::from_bng(&bng, zoom_level)?
                             }
-                            Crs::Bng => Self::from_bng(&centroid, zoom)?,
+                            Crs::Bng => Self::from_bng(&centroid, zoom_level)?,
                         };
                         cells.push(cell);
                     }
@@ -369,9 +394,9 @@ impl HexCell {
                     let cell = match crs {
                         Crs::Wgs84 => {
                             let bng = convert_to_bng(&pt, method)?;
-                            Self::from_bng(&bng, zoom)?
+                            Self::from_bng(&bng, zoom_level)?
                         }
-                        Crs::Bng => Self::from_bng(&pt, zoom)?,
+                        Crs::Bng => Self::from_bng(&pt, zoom_level)?,
                     };
                     cells.push(cell);
                 }
@@ -380,7 +405,7 @@ impl HexCell {
             Geometry::GeometryCollection(gc) => {
                 let mut all_cells = Vec::new();
                 for g in gc.0 {
-                    all_cells.extend(Self::from_geometry(g, zoom, crs, method)?);
+                    all_cells.extend(Self::from_geometry(g, zoom_level, crs, method)?);
                 }
                 Ok(all_cells)
             }
